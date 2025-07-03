@@ -27,7 +27,7 @@ async def tier_1_model_handler(
         }
     }
 
-    result = await graph.ainvoke(
+    result = graph.invoke(
         {"messages": [HumanMessage(content=data.user_query)]},
         config=config
     )
