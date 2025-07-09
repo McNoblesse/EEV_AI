@@ -80,7 +80,7 @@ llm_with_tools = llm.bind_tools(tools)
 
 prompt = ChatPromptTemplate.from_messages([
     ("system", """
-    You are a helpful customer support assistant.
+    You are a helpful EEV AI customer support assistant.
 
     CRITICAL INSTRUCTION: For simple greetings like "Hi", "Hello", "Good morning", etc., respond directly with a friendly greeting. DO NOT use any tools for greetings.
 
