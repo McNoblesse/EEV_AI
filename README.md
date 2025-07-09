@@ -1,6 +1,6 @@
 # eeV-AI
 
-eeV-AI is a conversational AI application built with FastAPI and LangChain. It provides a chatbot interface that can answer user queries by leveraging a powerful language model and retrieving information from a vector database. The project includes a FastAPI backend for the AI logic and a Streamlit frontend for user interaction and testing.
+eeV-AI is a conversational AI application built with FastAPI and LangChain. It provides a chatbot interface that can answer user queries by leveraging a powerful language model and retrieving information from a vector database. The project includes a FastAPI backend for the AI logic and a Gradio frontend for user interaction and testing.
 
 ## Features
 
@@ -8,7 +8,7 @@ eeV-AI is a conversational AI application built with FastAPI and LangChain. It p
 -   **RAG Pipeline:** Implements a Retrieval-Augmented Generation (RAG) pipeline using Pinecone's vector store to provide contextually relevant answers from a knowledge base.
 -   **Persistent Memory:** Maintains conversation history for each user session using a SQLite database.
 -   **Secure API:** The API endpoint is protected by API key authentication.
--   **Streamlit Frontend:** A simple and intuitive web interface for testing and interacting with the chatbot.
+-   **Gradio Frontend:** A simple and intuitive web interface for testing and interacting with the chatbot.
 
 ## Project Structure
 
@@ -21,7 +21,7 @@ eeV-AI is a conversational AI application built with FastAPI and LangChain. It p
 ├── config
 │   └── access_keys.py
 ├── frontend
-│   └── app.py
+│   └── gradio_app.py
 ├── main.py
 ├── model
 │   └── schema.py
@@ -35,7 +35,7 @@ eeV-AI is a conversational AI application built with FastAPI and LangChain. It p
 ```
 
 -   **`config/`**: Contains configuration for accessing API keys and secrets.
--   **`frontend/`**: Holds the Streamlit user interface code.
+-   **`frontend/`**: Holds the Gradio user interface code.
 -   **`main.py`**: The main entry point for the FastAPI application.
 -   **`model/`**: Defines the Pydantic data schemas for API requests and responses.
 -   **`route/`**: Defines the API routes and their logic.
@@ -97,15 +97,15 @@ uvicorn main:app --host 0.0.0.0 --port 8000
 
 The API will be available at `http://127.0.0.1:8000`.
 
-### 2. Run the Streamlit Frontend
+### 2. Run the Gradio Frontend
 
 In your second terminal, run the following command to start the user interface:
 
 ```bash
-streamlit run frontend/app.py
+python frontend/gradio_app.py
 ```
 
-This will open the application in your web browser. Enter the `tier_1_auth_key` you defined in your `.env` file to start chatting.
+This will open the application in your web browser. The API key is now hardcoded in `frontend/gradio_app.py` for convenience. **Remember to replace the placeholder `"your_tier_1_auth_key"` with your actual key from `.env` for the app to work.** The Gradio app will also provide a public URL that you can share with colleagues (valid for 72 hours).
 
 ## API Endpoint
 
@@ -137,5 +137,5 @@ This endpoint processes a user's query and returns the chatbot's response.
 -   **Backend:** FastAPI, Uvicorn
 -   **AI/ML:** LangChain, LangGraph, OpenAI, Google Generative AI
 -   **Database:** Pinecone (Vector Store), SQLite (Chat Memory)
--   **Frontend:** Streamlit
+-   **Frontend:** Gradio
 -   **Data Validation:** Pydantic
