@@ -1,9 +1,14 @@
 from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.orm import Session
+
 from security.authentication import AuthenticateTier1Model
 from model.schema import RequestPayload, PayloadResponse
-from langchain_core.messages import HumanMessage
-from utils.tier_1_utils import graph
+# We will use the new invocation function instead of the raw graph
+from utils.tier_1_utils import invoke_agent_with_analysis
+# Import database dependencies
+from config.database import get_db
+from model.database_models import Conversation
 
 router = APIRouter(
     prefix="/model", 
@@ -11,9 +16,11 @@ router = APIRouter(
 )
 
 @router.post("/tier_1_model", response_model=PayloadResponse)
-async def tier_1_model_handler(
+def tier_1_model_handler(
     data: RequestPayload, 
-    api_key: Annotated[str, Depends(AuthenticateTier1Model)]
+    api_key: Annotated[str, Depends(AuthenticateTier1Model)],
+    # Add the database session dependency
+    db: Session = Depends(get_db)
 ):
     if not api_key:
         raise HTTPException(
@@ -21,18 +28,31 @@ async def tier_1_model_handler(
             detail="Missing or invalid API key"
         )
 
-    config = {
-        "configurable": {
-            "thread_id": data.session_id
-        }
-    }
-
-    result = graph.invoke(
-        {"messages": [HumanMessage(content=data.user_query)]},
-        config=config
+    # 1. Invoke the agent to get the structured analysis.
+    # This function will call the graph and return the AnalyzedQuery object.
+    analysis_result = invoke_agent_with_analysis(
+        user_input=data.user_query,
+        session_id=data.session_id
     )
 
+    # 2. Log the analysis results to your PostgreSQL database.
+    new_conversation_turn = Conversation(
+        session_id=data.session_id,
+        user_query=data.user_query,
+        bot_response=analysis_result.response,
+        intent=analysis_result.intent,
+        sentiment=analysis_result.sentiment,
+        complexity_score=analysis_result.complexity_score
+    )
+    db.add(new_conversation_turn)
+    db.commit()
+    db.refresh(new_conversation_turn)
+
+    # Return the final response to the frontend.
     return PayloadResponse(
         session_id=data.session_id,
-        bot_response=result["messages"][-1].content 
+        bot_response=analysis_result.response,
+        intent=analysis_result.intent,
+        sentiment=analysis_result.sentiment,
+        complexity_score=analysis_result.complexity_score
     )

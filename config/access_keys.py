@@ -8,5 +8,7 @@ class AccessKeys(BaseSettings):
     OPENAI_API_KEY:str
     tier_1_auth_key:str
     GEMINI_API_KEY:str
+    POSTGRES_URL:str
+    SQLITE_DB_PATH:str
     
 accessKeys = AccessKeys()
