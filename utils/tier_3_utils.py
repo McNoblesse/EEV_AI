@@ -13,6 +13,7 @@ from typing import TypedDict, List, Annotated
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langgraph.checkpoint.sqlite import SqliteSaver
+from langchain_openai import ChatOpenAI
 
 from config.access_keys import accessKeys
 
@@ -42,7 +43,7 @@ class MessagesState(TypedDict):
   messages: Annotated[List[AnyMessage], add_messages]
   analysis: AnalyzedQuery
 
-llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash")
+llm = ChatOpenAI(model="gpt-4o-mini-2024-07-18")
 
 @tool
 def retriever_tool(query: str) -> str:

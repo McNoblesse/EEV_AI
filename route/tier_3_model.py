@@ -5,17 +5,17 @@ from sqlalchemy.orm import Session
 from security.authentication import AuthenticateTier1Model
 from model.schema import RequestPayload, PayloadResponse
 # We will use the new invocation function instead of the raw graph
-from utils.tier_1_utils import invoke_agent_with_analysis
+from utils.tier_3_utils import invoke_agent_with_analysis
 # Import database dependencies
 from config.database import get_db
 from model.database_models import Conversation
 
 router = APIRouter(
     prefix="/model", 
-    tags=["Tier 1 model"]
+    tags=["Tier 3 model"]
 )
 
-@router.post("/tier_1_model", response_model=PayloadResponse)
+@router.post("/tier_3_model", response_model=PayloadResponse)
 def tier_1_model_handler(
     data: RequestPayload, 
     api_key: Annotated[str, Depends(AuthenticateTier1Model)],
