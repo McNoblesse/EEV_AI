@@ -10,5 +10,7 @@ class AccessKeys(BaseSettings):
     GEMINI_API_KEY:str
     POSTGRES_URL:str
     SQLITE_DB_PATH:str
+
+    model_config = SettingsConfigDict(env_file='.env', extra='ignore')
     
 accessKeys = AccessKeys()

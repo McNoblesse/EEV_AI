@@ -2,16 +2,22 @@ version: '3.8'
 
 services:
   backend:
-    build: .
+    build:
+      context: .
+      # Pass variables from the .env file as build arguments
+      args:
+        - pinecone_api=${pinecone_api}
+        - OPENAI_API_KEY=${OPENAI_API_KEY}
+        - tier_1_auth_key=${tier_1_auth_key}
+        - GEMINI_API_KEY=${GEMINI_API_KEY}
+        - POSTGRES_URL=${POSTGRES_URL}
+        - SQLITE_DB_PATH=${SQLITE_DB_PATH}
     container_name: eev-ai-backend
-    env_file:
-      - .env
+    # The env_file directive is no longer needed
     ports:
-      # Map host port 8056 to container port 8056
       - "8056:8056"
     volumes:
       - checkpoints_data:/app/checkpoint.sqlite
-    # Tell uvicorn to run on port 8056 inside the container
     command: uvicorn main:app --host 0.0.0.0 --port 8056
 
 volumes:
