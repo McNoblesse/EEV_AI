@@ -7,10 +7,12 @@ services:
     env_file:
       - .env
     ports:
-      - "8000:8000"
+      # Map host port 8056 to container port 8056
+      - "8056:8056"
     volumes:
       - checkpoints_data:/app/checkpoint.sqlite
-    command: uvicorn main:app --host 0.0.0.0 --port 8000
+    # Tell uvicorn to run on port 8056 inside the container
+    command: uvicorn main:app --host 0.0.0.0 --port 8056
 
 volumes:
   checkpoints_data:

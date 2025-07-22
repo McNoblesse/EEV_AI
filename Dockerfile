@@ -14,4 +14,4 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 # Expose the port for the backend
-EXPOSE 8000
+EXPOSE 8056
