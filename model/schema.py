@@ -5,7 +5,7 @@ class RequestPayload(BaseModel):
     session_id:str
     
 class PayloadResponse(BaseModel):
-    bot_response:str
+    agent_response:str
     session_id:str
     intent: str
     sentiment: str

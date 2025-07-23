@@ -51,7 +51,7 @@ def tier_1_model_handler(
     # Return the final response to the frontend.
     return PayloadResponse(
         session_id=data.session_id,
-        bot_response=analysis_result.response,
+        agent_response=analysis_result.response,
         intent=analysis_result.intent,
         sentiment=analysis_result.sentiment,
         complexity_score=analysis_result.complexity_score
