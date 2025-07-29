@@ -7,7 +7,9 @@ import aiofiles
 import aiohttp
 from fastapi import UploadFile, HTTPException
 from openai import OpenAI
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+from typing import List
+from utils.enhanced_nlp_pipeline import ExtractedEntity, EnhancedAnalyzedQuery
 
 from config.access_keys import accessKeys
 from utils.tier_3_utils import invoke_agent_with_analysis
@@ -27,8 +29,19 @@ class VoiceResponse(BaseModel):
     ai_response_text: str
     audio_file_path: str
     intent: str
+    intent_confidence: float
+    sub_intent: str
     sentiment: str
+    sentiment_score: float
     complexity_score: int
+    complexity_factors: List[str]
+    entities: List[ExtractedEntity]  # Changed from List[dict] to the proper type
+    keywords: List[str]
+    user_type: str
+    requires_tools: bool
+    escalate: bool
+    conversation_summary: str
+    conversation_ended: bool
     transcription_model_used: str
     tts_model_used: str
     voice_used: str
@@ -220,10 +233,10 @@ class VoiceProcessor:
     ) -> VoiceResponse:
         """Complete voice-to-voice pipeline with OpenAI models"""
         
-        # Step 1: Validate audio file
+        # Validate audio file
         await self.validate_audio_file(audio_file)
         
-        # Step 2: Transcribe speech to text using OpenAI models
+        # Transcribe speech to text using OpenAI models
         transcribed_text = await self.transcribe_audio(
             file=audio_file,
             model=transcription_model,
@@ -233,13 +246,13 @@ class VoiceProcessor:
         if not transcribed_text.strip():
             raise HTTPException(status_code=400, detail="No speech detected in audio")
         
-        # Step 3: Process with existing AI (Tier 3)
-        ai_analysis = invoke_agent_with_analysis(
-            user_input=transcribed_text,
-            session_id=session_id
+        # Process with existing AI (Tier 3)
+        ai_analysis: EnhancedAnalyzedQuery = invoke_agent_with_analysis(
+        user_input=transcribed_text,
+        session_id=session_id
         )
         
-        # Step 4: Convert AI response to speech using OpenAI TTS
+        # Convert AI response to speech using OpenAI TTS
         audio_file_path = await self.generate_tts_audio(
             text=ai_analysis.response,
             voice=voice,
@@ -248,15 +261,26 @@ class VoiceProcessor:
             instructions=tts_instructions
         )
         
-        # Step 5: Return complete response
+        # Return complete response
         return VoiceResponse(
             session_id=session_id,
             transcribed_text=transcribed_text,
             ai_response_text=ai_analysis.response,
             audio_file_path=audio_file_path,
             intent=ai_analysis.intent,
+            intent_confidence=ai_analysis.intent_confidence,
+            sub_intent=ai_analysis.sub_intent,
             sentiment=ai_analysis.sentiment,
+            sentiment_score=ai_analysis.sentiment_score,
             complexity_score=ai_analysis.complexity_score,
+            complexity_factors=ai_analysis.complexity_factors,
+            entities=ai_analysis.entities,
+            keywords=ai_analysis.keywords,
+            user_type=ai_analysis.user_type,
+            requires_tools=ai_analysis.requires_tools,
+            escalate=getattr(ai_analysis, 'escalate', False),
+            conversation_summary=getattr(ai_analysis, 'conversation_summary', ""),
+            conversation_ended=getattr(ai_analysis, 'conversation_ended', False),
             transcription_model_used=transcription_model,
             tts_model_used=tts_model,
             voice_used=voice

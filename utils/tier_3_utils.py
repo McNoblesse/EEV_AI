@@ -117,26 +117,27 @@ def customer_agent_node(state: MessagesState):
 
         # Empathetic response for troubleshooting/negative sentiment
         if analysis.intent in ["troubleshooting", "bug_report", "issue", "problem", "integration_help"] or analysis.sentiment == "negative":
-            analysis.response = (
-                "I'm really sorry you're experiencing this critical issue with your integration. "
-                "Let's work together to resolve it as quickly as possible. "
-                "Could you please provide more details about the error messages or steps you've tried so far? "
-                "I'm here to help you every step of the way."
-            )
-            return {"messages": [AIMessage(content=analysis.response)], "analysis": analysis}
+            # analysis.response = (
+            #     "I'm really sorry you're experiencing this critical issue with your integration. "
+            #     "Let's work together to resolve it as quickly as possible. "
+            #     "Could you please provide more details about the error messages or steps you've tried so far? "
+            #     "I'm here to help you every step of the way."
+            # )
+            # return {"messages": [AIMessage(content=analysis.response)], "analysis": analysis}
+            pass
 
         # For information-seeking intents, use the retriever tool
-        info_intents = [
-            "technical_question", "product_inquiry", "general_information",
-            "account_support", "integration_help", "feature_request", "pricing_query", "user_feedback"
-        ]
-        if analysis.intent in info_intents:
-            kb_result = retriever_tool(state["messages"][-1].content)
-            analysis.response = (
-                f"As your support agent, here's what I found for you:\n\n{kb_result}\n\n"
-                "If you need more details or have another question, just let me know!"
-            )
-            return {"messages": [AIMessage(content=analysis.response)], "analysis": analysis}
+        # info_intents = [
+        #     "technical_question", "product_inquiry", "general_information",
+        #     "account_support", "integration_help", "feature_request", "pricing_query", "user_feedback"
+        # ]
+        # if analysis.intent in info_intents:
+        #     kb_result = retriever_tool(state["messages"][-1].content)
+        #     analysis.response = (
+        #         f"As your support agent, here's what I found for you:\n\n{kb_result}\n\n"
+        #         "If you need more details or have another question, just let me know!"
+        #     )
+        #     return {"messages": [AIMessage(content=analysis.response)], "analysis": analysis}
 
         # ...existing context-aware prompt logic for other cases...
         mode_string = "tool assistance" if analysis.requires_tools else "direct response"
@@ -157,98 +158,75 @@ def customer_agent_node(state: MessagesState):
         response_message = chain.invoke({"messages": state["messages"]})
 
         # Fallback: If response is empty, set a default message
-        content = getattr(response_message, "content", "")
-        if not content or not str(content).strip():
-            content = "I'm Eev, your AI assistant. How can I help you today?"
-        analysis.response = str(content)
-        return {"messages": [AIMessage(content=analysis.response)], "analysis": analysis}
+        # content = getattr(response_message, "content", "")
+        # if not content or not str(content).strip():
+        #     content = "I'm Eev, your AI assistant. How can I help you today?"
+        # analysis.response = str(content)
+        return {"messages": [response_message], "analysis": analysis}
     else:
         # fallback logic
         fallback_msg = "I'm Eev, your AI assistant. How can I help you today?"
         return {"messages": [AIMessage(content=fallback_msg)], "analysis": analysis}
 
 def structured_output_node(state: MessagesState):
-    analysis = state.get("analysis")
+    """
+    This node takes the final response from the agent, populates it into the
+    analysis object, and adds final metadata like escalation flags.
+    """
+    analysis = state["analysis"]
+    
+    # The final response from the agent is the last message in the state
+    last_message = state["messages"][-1]
+    
+    # Get the text content from that final message
+    final_response_content = ""
+    if isinstance(last_message, AIMessage):
+        final_response_content = last_message.content
+
+    # If the content is empty for any reason, use a safe fallback
+    if not final_response_content:
+        final_response_content = "I seem to have lost my train of thought. Could you please ask again?"
+
+    # **THIS IS THE KEY FIX**: Update analysis.response with the actual final answer
+    analysis.response = final_response_content
+
+    # Now, perform the final metadata checks using this final response
     escalate = False
     conversation_summary = ""
     conversation_ended = False
 
-    if analysis:
-        # Personalized response for greeting intent
-        if analysis.intent in ["greeting", "hello", "hi"]:
-            analysis.response = (
-                "Hello! 👋 I'm Eev, your AI assistant. "
-                "How can I help you today?"
-            )
-            return {
-                "messages": [AIMessage(content=analysis.response)],
-                "analysis": analysis
-            }
+    # Escalation logic
+    if analysis.complexity_score >= 9 or analysis.sentiment == "negative":
+        escalate = True
+        conversation_summary = (
+            f"Escalation required. Intent: {analysis.intent}, "
+            f"Complexity: {analysis.complexity_score}, "
+            f"Sentiment: {analysis.sentiment}. "
+            f"Summary: {analysis.response}"
+        )
 
-        # For information-seeking intents, use the retriever tool
-        info_intents = [
-            "technical_question", "product_inquiry", "general_information",
-            "account_support", "integration_help"
-        ]
-        if analysis.intent in info_intents:
-            # Use the retriever tool to fetch from Pinecone vector DB
-            kb_result = retriever_tool(state["messages"][-1].content)
-            # Compose a human-like response using the persona
-            analysis.response = (
-                f"Here's what I found for your question about {analysis.intent}:\n\n{kb_result}\n\n"
-                "If you have more questions or need further details, feel free to ask!"
-            )
-            return {
-                "messages": [AIMessage(content=analysis.response)],
-                "analysis": analysis
-            }
+    # Conversation end detection (check the user's last message)
+    last_user_message = ""
+    for msg in reversed(state["messages"]):
+        if isinstance(msg, HumanMessage):
+            last_user_message = msg.content.lower()
+            break
+            
+    if any(phrase in last_user_message for phrase in ["thank you", "thanks", "bye", "goodbye", "that will be all"]):
+        conversation_ended = True
+        conversation_summary = (
+            f"Conversation ended. Intent: {analysis.intent}, "
+            f"Summary: {analysis.response}"
+        )
 
-        # Escalation logic
-        if analysis.complexity_score >= 9 or analysis.sentiment == "negative":
-            escalate = True
-            conversation_summary = (
-                f"Escalation required. Intent: {analysis.intent}, "
-                f"Complexity: {analysis.complexity_score}, "
-                f"Sentiment: {analysis.sentiment}. "
-                f"Summary: {analysis.response}"
-            )
+    # Attach these to the analysis object for the final API response
+    analysis.escalate = escalate
+    analysis.conversation_summary = conversation_summary
+    analysis.conversation_ended = conversation_ended
 
-        # Conversation end detection
-        last_user_message = state["messages"][-1].content.lower()
-        if any(phrase in last_user_message for phrase in ["thank you", "thanks", "bye", "goodbye", "that will be all"]):
-            conversation_ended = True
-            conversation_summary = (
-                f"Conversation ended. Intent: {analysis.intent}, "
-                f"Summary: {analysis.response}"
-            )
+    # The state is now complete and correct
+    return {"messages": state["messages"], "analysis": analysis}
 
-        # Attach these to analysis for API response
-        analysis.escalate = escalate
-        analysis.conversation_summary = conversation_summary
-        analysis.conversation_ended = conversation_ended
-
-        return {
-            "messages": [AIMessage(content=analysis.response)],
-            "analysis": analysis
-        }
-    else:
-        # Fallback to original behavior
-        analysis_result = structured_output_chain.invoke({"messages": state["messages"]})
-        # Handle case where result might be a dict instead of AnalyzedQuery object
-        if isinstance(analysis_result, dict):
-            response_content = analysis_result.get("response", "I'm here to help you!")
-            return {
-                "messages": [AIMessage(content=response_content)],
-                "analysis": analysis_result
-            }
-        else:
-            # Fallback: If response is empty, set a default message
-            if not analysis_result.response or not str(analysis_result.response).strip():
-                analysis_result.response = "I'm Eev, your AI assistant. How can I help you today?"
-            return {
-                "messages": [AIMessage(content=analysis_result.response)],
-                "analysis": analysis_result
-            }
 
 # DEFINE CONDITIONAL LOGIC
 def tool_conditions(state: MessagesState):

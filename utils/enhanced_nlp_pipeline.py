@@ -10,11 +10,15 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 import sqlite3
 from datetime import datetime
 import json
+from langchain_core.pydantic_v1 import BaseModel as LangchainBaseModel, Field as LangchainField
 
 from config.access_keys import accessKeys
 
 # Ensure OpenAI API key is set for the environment
 os.environ["OPENAI_API_KEY"] = accessKeys.OPENAI_API_KEY
+
+# Download spaCy model if not already installed
+spacy.cli.download("en_core_web_sm")
 
 # Load spaCy model for entity extraction
 try:
@@ -49,6 +53,13 @@ class EnhancedAnalyzedQuery(BaseModel):
     conversation_summary: str = Field(default="", description="Summary of the conversation for context")
     conversation_ended: bool = Field(default=False, description="Whether the conversation has been marked as ended")
 
+class IntentAnalysisResult(LangchainBaseModel):
+    """Structured output for intent classification."""
+    primary_intent: str = LangchainField(description="The main category of the user's query.")
+    confidence_score: float = LangchainField(description="The confidence score for the classification, from 0.0 to 1.0.")
+    sub_intent: str = LangchainField(description="A more specific sub-category, or 'none' if not applicable.")
+    reasoning: str = LangchainField(description="A brief explanation for the classification choice.")
+
 class EnhancedNLPPipeline:
     """Enhanced NLP pipeline for comprehensive query analysis."""
     
@@ -80,6 +91,7 @@ class EnhancedNLPPipeline:
                 complexity_factors TEXT,
                 entities TEXT,
                 keywords TEXT,
+                       
                 user_type TEXT,
                 processing_time_ms INTEGER
             )
@@ -127,7 +139,7 @@ class EnhancedNLPPipeline:
             ("human", "Classify this user message: {user_input}")
         ])
         
-        return intent_prompt | self.llm
+        return intent_prompt | self.llm.with_structured_output(IntentAnalysisResult)
     
     def _setup_entity_extractor(self):
         """Setup entity extraction system."""
@@ -259,11 +271,13 @@ class EnhancedNLPPipeline:
         
         # Intent Classification
         try:
-            intent_response = self.intent_classifier.invoke({"user_input": user_input})
-            content = intent_response.content
-            if isinstance(content, list):
-                content = str(content[0]) if content else ""
-            intent_analysis = self._parse_intent_response(content)
+            # The classifier now directly returns a structured object, not text.
+            intent_analysis_result: IntentAnalysisResult = self.intent_classifier.invoke({"user_input": user_input})
+            intent_analysis = {
+                "intent": intent_analysis_result.primary_intent,
+                "confidence": intent_analysis_result.confidence_score,
+                "sub_intent": intent_analysis_result.sub_intent
+            }
         except Exception as e:
             print(f"Intent classification error: {e}")
             intent_analysis = {

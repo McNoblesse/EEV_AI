@@ -2,3 +2,12 @@ venv/
 .env
 __pycache__/
 .venv/
+
+
+# Ignore SQLite database files
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+
+# Ignore static assets like audio recordings
+static/
