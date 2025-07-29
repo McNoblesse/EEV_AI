@@ -247,11 +247,14 @@ class VoiceProcessor:
             raise HTTPException(status_code=400, detail="No speech detected in audio")
         
         # Process with existing AI (Tier 3)
-        ai_analysis: EnhancedAnalyzedQuery = invoke_agent_with_analysis(
-        user_input=transcribed_text,
-        session_id=session_id
+        loop = asyncio.get_event_loop()
+        ai_analysis: EnhancedAnalyzedQuery = await loop.run_in_executor(
+            None,  # Use the default thread pool executor
+            invoke_agent_with_analysis,
+            transcribed_text,
+            session_id
         )
-        
+
         # Convert AI response to speech using OpenAI TTS
         audio_file_path = await self.generate_tts_audio(
             text=ai_analysis.response,

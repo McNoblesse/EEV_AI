@@ -3,6 +3,7 @@ import re
 import spacy
 from typing import Dict, List, Tuple, Optional
 from pydantic import BaseModel, Field
+from langchain_core.pydantic_v1 import BaseModel as LangchainBaseModel, Field as LangchainField
 from langchain_core.messages import HumanMessage, AIMessage
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI
@@ -10,7 +11,7 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 import sqlite3
 from datetime import datetime
 import json
-from langchain_core.pydantic_v1 import BaseModel as LangchainBaseModel, Field as LangchainField
+from pydantic import BaseModel, Field
 
 from config.access_keys import accessKeys
 
@@ -59,6 +60,20 @@ class IntentAnalysisResult(LangchainBaseModel):
     confidence_score: float = LangchainField(description="The confidence score for the classification, from 0.0 to 1.0.")
     sub_intent: str = LangchainField(description="A more specific sub-category, or 'none' if not applicable.")
     reasoning: str = LangchainField(description="A brief explanation for the classification choice.")
+
+class EntityAnalysisResult(LangchainBaseModel):
+    """Structured output for a single extracted entity."""
+    entity_text: str = LangchainField(description="The exact text of the entity.")
+    entity_type: str = LangchainField(description="The category of the entity (e.g., PRODUCT, PERSON, TECHNOLOGY).")
+
+class EntityList(LangchainBaseModel):
+    """A list of extracted entities."""
+    entities: List[EntityAnalysisResult] = LangchainField(description="A list of all entities found in the user's message.")
+
+class ComplexityAnalysisResult(LangchainBaseModel):
+    """Structured output for complexity analysis."""
+    complexity_score: int = LangchainField(description="The complexity score from 1 to 10.")
+    contributing_factors: List[str] = LangchainField(description="A list of the factors that contributed to the complexity score.")
 
 class EnhancedNLPPipeline:
     """Enhanced NLP pipeline for comprehensive query analysis."""
@@ -167,7 +182,7 @@ class EnhancedNLPPipeline:
             ("human", "Extract entities from: {user_input}")
         ])
         
-        return entity_prompt | self.llm
+        return entity_prompt | self.llm.with_structured_output(EntityList)
     
     def _setup_complexity_analyzer(self):
         """Setup query complexity analysis."""
@@ -199,7 +214,7 @@ class EnhancedNLPPipeline:
             ("human", "Analyze complexity of: {user_input}")
         ])
         
-        return complexity_prompt | self.llm
+        return complexity_prompt | self.llm.with_structured_output(ComplexityAnalysisResult)
     
     def extract_entities_with_spacy(self, text: str) -> List[ExtractedEntity]:
         """Extract entities using spaCy NER."""
@@ -288,34 +303,33 @@ class EnhancedNLPPipeline:
         
         # Entity Extraction
         spacy_entities = self.extract_entities_with_spacy(user_input)
-        
+        llm_entities = []
         try:
-            llm_entity_response = self.entity_extractor.invoke({"user_input": user_input})
-            content = llm_entity_response.content
-            if isinstance(content, list):
-                content = str(content[0]) if content else ""
-            llm_entities = self._parse_entity_response(content)
+            entity_list_result: EntityList = self.entity_extractor.invoke({"user_input": user_input})
+            for entity_result in entity_list_result.entities:
+                llm_entities.append(ExtractedEntity(
+                    text=entity_result.entity_text,
+                    label=entity_result.entity_type,
+                    confidence=0.9, # LLM confidence is generally high
+                    start_pos=0,
+                    end_pos=0
+                ))
         except Exception as e:
-            print(f"Entity extraction error: {e}")
-            llm_entities = []
+            print(f"LLM Entity extraction error: {e}")
         
         # Combine entities
         all_entities = spacy_entities + llm_entities
         
         # Complexity Analysis
         try:
-            complexity_response = self.complexity_analyzer.invoke({"user_input": user_input})
-            content = complexity_response.content
-            if isinstance(content, list):
-                content = str(content[0]) if content else ""
-            complexity_analysis = self._parse_complexity_response(content)
+            complexity_result: ComplexityAnalysisResult = self.complexity_analyzer.invoke({"user_input": user_input})
+            complexity_analysis = {
+                "score": complexity_result.complexity_score,
+                "factors": complexity_result.contributing_factors
+            }
         except Exception as e:
             print(f"Complexity analysis error: {e}")
-            complexity_analysis = {
-                "score": 5,
-                "factors": ["Unable to analyze"],
-                "estimated_time": "medium"
-            }
+            complexity_analysis = {"score": 5, "factors": ["Unable to analyze"]}
         
         # Sentiment Analysis (enhanced)
         sentiment_analysis = self._analyze_sentiment(user_input)
@@ -341,8 +355,8 @@ class EnhancedNLPPipeline:
             complexity_factors=complexity_analysis["factors"],
             keywords=keywords,
             response="",  # Will be filled by the response generator
-            requires_tools=requires_tools,
-            user_type=user_type
+            requires_tools=self._requires_tools(intent_analysis["intent"], user_input),
+            user_type=self.determine_user_type(user_input, intent_analysis["intent"])
         )
         
         # Log analytics

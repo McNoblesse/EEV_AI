@@ -244,8 +244,8 @@ def tool_conditions(state: MessagesState):
         return "end"
 
 # Use the synchronous SqliteSaver with a direct connection
-conn = sqlite3.connect(SQLITE_DB, check_same_thread=False)
-memory = SqliteSaver(conn=conn)
+# conn = sqlite3.connect(SQLITE_DB, check_same_thread=False)
+# memory = SqliteSaver(conn=conn)
 
 workflow = StateGraph(MessagesState)
 
@@ -267,25 +267,33 @@ workflow.add_conditional_edges(
 workflow.add_edge("tool_node", "agent")
 workflow.add_edge("final_answer_node", END)
 
-graph = workflow.compile(checkpointer=memory)
+# graph = workflow.compile(checkpointer=memory)
 
 def invoke_agent_with_analysis(user_input: str, session_id: str) -> EnhancedAnalyzedQuery:
     """
     Enhanced invocation with comprehensive NLP analysis.
+    This function now compiles the graph on each call to ensure thread safety.
     """
-    # Perform enhanced NLP analysis first
-    analysis = enhanced_nlp.analyze_query(user_input, session_id)
-    
-    config = {"thread_id": session_id}
-    messages = [HumanMessage(content=user_input)]
-    
-    # Include analysis in initial state, ensuring correct types for MessagesState
-    initial_state: MessagesState = {
-        "messages": messages,
-        "analysis": analysis
-    }
-    
-    final_state = graph.invoke(initial_state, config=config)
-    
-    analysis_result = final_state['analysis']
-    return analysis_result
+
+    with SqliteSaver.from_conn_string(SQLITE_DB) as memory:
+        # The graph is compiled inside the 'with' block using the valid 'memory' object.
+        graph = workflow.compile(checkpointer=memory)
+
+        # Perform enhanced NLP analysis first
+        analysis = enhanced_nlp.analyze_query(user_input, session_id)
+        
+        config = {"configurable": {"thread_id": session_id}}
+        
+        # The input for the graph includes the new message and the analysis object.
+        graph_input = {
+            "messages": [HumanMessage(content=user_input)],
+            "analysis": analysis
+        }
+        
+        # The graph is invoked with the new input and the config.
+        final_state = graph.invoke(graph_input, config=config)
+        
+        # The final analysis is extracted from the result.
+        analysis_result = final_state['analysis']
+        
+        return analysis_result
