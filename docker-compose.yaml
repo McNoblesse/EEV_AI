@@ -12,8 +12,19 @@ services:
         - GEMINI_API_KEY=${GEMINI_API_KEY}
         - POSTGRES_URL=${POSTGRES_URL}
         - SQLITE_DB_PATH=${SQLITE_DB_PATH}
+        - MAIL_USERNAME=${MAIL_USERNAME}
+        - MAIL_PASSWORD=${MAIL_PASSWORD}
+        - MAIL_FROM=${MAIL_FROM}
+        - MAIL_PORT=${MAIL_PORT}
+        - MAIL_SERVER=${MAIL_SERVER}
+        - MAIL_FROM_NAME=${MAIL_FROM_NAME}
+        - FRESHDESK_API_KEY=${FRESHDESK_API_KEY}
+        - FRESHDESK_DOMAIN=${FRESHDESK_DOMAIN}
+        - TICKET_QUEUE=${TICKET_QUEUE}
+        - REDIS_HOST=${REDIS_HOST}
+        - REDIS_PORT=${REDIS_PORT}
+        - REDIS_PASSWORD=${REDIS_PASSWORD}
     container_name: eev-ai-backend
-    # The env_file directive is no longer needed
     ports:
       - "8056:8056"
     volumes:
