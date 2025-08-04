@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import List, Optional
+from typing import List, Optional, Any
 
 class RequestPayload(BaseModel):
     user_query: str
@@ -27,4 +27,8 @@ class PayloadResponse(BaseModel):
     escalate: Optional[bool] = False
     conversation_summary: Optional[str] = ""
     conversation_ended: Optional[bool] = False
+
+class TicketResponse(BaseModel):
+    data: dict[str, Any]
+    message_status: str | None = str
 

@@ -12,3 +12,5 @@ class Conversation(Base):
     sentiment = Column(String, nullable=True)
     complexity_score = Column(Integer, nullable=True)
     timestamp = Column(DateTime(timezone=True), server_default=func.now())
+
+    
