@@ -17,23 +17,39 @@ FRESHDESK_DOMAIN = "optimusai-support.freshdesk.com"
 TICKET_QUEUE = "freshdesk_tickets"
 
 # Redis Configuration
-REDIS_HOST = "redis-10197.c81.us-east-1-2.ec2.redns.redis-cloud.com"
-REDIS_PORT = 10197
-REDIS_PASSWORD = "UIzWMNbnGY69jUQxiCwryywpZJ1xRNLh"
+REDIS_HOST = "138.197.129.114"
+REDIS_PORT = 5468
+REDIS_PASSWORD = "2EGVdBboonI6Jzk6J3k04qPeyqharrZoYGMKClDhus74oWG5nYgDWSP4NyIpHS7q"
+REDIS_USERNAME = "default"
+REDIS_DB = 0
 
 logging.basicConfig(level=logging.INFO)
 
 
 def get_redis_client():
     """Create and return a Redis client"""
-    return redis.Redis(
-        host=REDIS_HOST,
-        port=REDIS_PORT,
-        password=REDIS_PASSWORD,
-        decode_responses=False  # Keep as False since we're storing binary data
-    )
-
-
+    try:
+        client = redis.Redis(
+            host=REDIS_HOST,
+            port=REDIS_PORT,
+            username=REDIS_USERNAME,
+            password=REDIS_PASSWORD,
+            db=REDIS_DB,
+            decode_responses=False,
+            socket_connect_timeout=10,
+            socket_timeout=10,
+            retry_on_timeout=True
+        )
+        
+        # Test the connection
+        client.ping()
+        logging.info("Successfully connected to Redis")
+        return client
+        
+    except Exception as e:
+        logging.error(f"Failed to connect to Redis: {e}")
+        raise e
+    
 async def process_freshdesk_ticket(message_data):
     """
     Process a ticket message from Redis and send AI response to Freshdesk

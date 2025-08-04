@@ -23,6 +23,7 @@ ARG TICKET_QUEUE
 ARG REDIS_HOST
 ARG REDIS_PORT
 ARG REDIS_PASSWORD
+ARG REDIS_USERNAME
 
 # Set environment variables inside the container from the build-time arguments
 ENV pinecone_api=$pinecone_api
@@ -43,9 +44,12 @@ ENV TICKET_QUEUE=$TICKET_QUEUE
 ENV REDIS_HOST=$REDIS_HOST
 ENV REDIS_PORT=$REDIS_PORT
 ENV REDIS_PASSWORD=$REDIS_PASSWORD
+ENV REDIS_USERNAME=$REDIS_USERNAME
 
-# Install supervisor to manage multiple processes
-RUN apt-get update && apt-get install -y supervisor && rm -rf /var/lib/apt/lists/*
+# Install supervisor and create log directories
+RUN apt-get update && apt-get install -y supervisor && \
+    mkdir -p /var/log/supervisor && \
+    rm -rf /var/lib/apt/lists/*
 
 # Copy the requirements file into the container at /app
 COPY requirements.txt .

@@ -1,10 +1,7 @@
-version: '3.8'
-
 services:
   backend:
     build:
       context: .
-      # Pass variables from the .env file as build arguments
       args:
         - pinecone_api=${pinecone_api}
         - OPENAI_API_KEY=${OPENAI_API_KEY}
@@ -24,12 +21,13 @@ services:
         - REDIS_HOST=${REDIS_HOST}
         - REDIS_PORT=${REDIS_PORT}
         - REDIS_PASSWORD=${REDIS_PASSWORD}
+        - REDIS_USERNAME=${REDIS_USERNAME}
     container_name: eev-ai-backend
     ports:
       - "8056:8056"
     volumes:
       - checkpoints_data:/app/checkpoint.sqlite
-    # Remove the command since we're using supervisor now
+    restart: unless-stopped
 
 volumes:
   checkpoints_data:
