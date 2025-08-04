@@ -29,7 +29,7 @@ services:
       - "8056:8056"
     volumes:
       - checkpoints_data:/app/checkpoint.sqlite
-    command: uvicorn main:app --host 0.0.0.0 --port 8056
+    # Remove the command since we're using supervisor now
 
 volumes:
   checkpoints_data:

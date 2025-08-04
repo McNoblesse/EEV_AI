@@ -44,6 +44,9 @@ ENV REDIS_HOST=$REDIS_HOST
 ENV REDIS_PORT=$REDIS_PORT
 ENV REDIS_PASSWORD=$REDIS_PASSWORD
 
+# Install supervisor to manage multiple processes
+RUN apt-get update && apt-get install -y supervisor && rm -rf /var/lib/apt/lists/*
+
 # Copy the requirements file into the container at /app
 COPY requirements.txt .
 
@@ -53,5 +56,11 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy the rest of the application's code into the container
 COPY . .
 
+# Copy supervisor configuration
+COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
+
 # Expose the port for the backend
 EXPOSE 8056
+
+# Use supervisor to run both FastAPI and worker
+CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
