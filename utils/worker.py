@@ -12,7 +12,7 @@ from model.freshdesk_model import Messages
 from utils.format_ai_response import clean_ai_response
 
 # Configuration
-FRESHDESK_API_KEY = "xkD2P495jZmM2dmPxyO"
+FRESHDESK_API_KEY = "G8YaoKsBFMHMx72qrL"
 FRESHDESK_DOMAIN = "optimusai-support.freshdesk.com"
 TICKET_QUEUE = "freshdesk_tickets"
 
