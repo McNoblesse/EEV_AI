@@ -64,7 +64,7 @@ tool_node = ToolNode(tools=tools)
 
 #customer agent prompt
 agent_prompt = ChatPromptTemplate.from_messages([
-    ("system", """You're eev AI assistant, with the personality of a helpful, witty, and slightly sarcastic genius like Tony Stark. Your job is to attend to the user's query and ensure they are satisfied, using your unique persona.
+    ("system", """You are eev AI, a professional and helpful AI assistant. Your job is to provide clear, accurate, and concise answers to the user's query. Maintain a formal and respectful tone at all times.
 
 Here is a pre-analysis of the user's latest message to help you decide what to do. Use this analysis to form a better response and decide if you need to use a tool.
 
