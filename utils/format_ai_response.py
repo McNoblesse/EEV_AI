@@ -31,3 +31,63 @@ def clean_ai_response(response_text):
     response_text = '\n'.join(lines)
 
     return response_text
+
+def format_llm_output_for_email(llm_text: str) -> str:
+    """
+    Converts raw LLM text with simple markdown into a structured HTML email body.
+    - Handles '###' as bold headings.
+    - Handles '-' and numbered lists as HTML bullet points.
+    - Wraps paragraphs in <p> tags for proper spacing.
+    """
+    if not llm_text:
+        return ""
+
+    html_parts = []
+    in_list = False
+    
+    # Split the text into lines for processing
+    lines = llm_text.strip().split('\n')
+
+    for line in lines:
+        line = line.strip()
+
+        # If the line is empty, it's a paragraph break
+        if not line:
+            if in_list:
+                html_parts.append("</ul>")
+                in_list = False
+            continue
+
+        # Handle headings (###)
+        if line.startswith("###"):
+            if in_list:
+                html_parts.append("</ul>")
+                in_list = False
+            heading_text = line.replace("###", "").strip()
+            # Add a line break before the heading for spacing, except for the first element
+            if html_parts:
+                html_parts.append("<br>")
+            html_parts.append(f"<strong>{heading_text}</strong>")
+        
+        # Handle list items (-) or numbered (1., 2.)
+        elif line.startswith("- ") or (line.split('.')[0].isdigit() and line[1:3] == '. '):
+            if not in_list:
+                html_parts.append("<ul>")
+                in_list = True
+            # Remove the list marker ('- ' or '1. ')
+            item_text = line.split(' ', 1)[1]
+            html_parts.append(f"<li>{item_text}</li>")
+        
+        # Handle regular paragraphs
+        else:
+            if in_list:
+                html_parts.append("</ul>")
+                in_list = False
+            html_parts.append(f"<p>{line}</p>")
+
+    # Close any open list at the end
+    if in_list:
+        html_parts.append("</ul>")
+
+    inner_html =  "".join(html_parts)
+    return f"<html><body>{inner_html}</body></html>"

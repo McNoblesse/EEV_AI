@@ -6,7 +6,7 @@ from .access_keys import accessKeys
 # Your PostgreSQL connection URL
 DATABASE_URL = accessKeys.POSTGRES_URL
 
-engine = create_engine(DATABASE_URL)
+engine = create_engine(DATABASE_URL, pool_pre_ping=True)
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 

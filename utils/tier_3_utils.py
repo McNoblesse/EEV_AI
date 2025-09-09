@@ -6,349 +6,184 @@ from langgraph.graph import StateGraph, END, START
 from langgraph.prebuilt import ToolNode
 from langchain_core.tools import tool
 from langgraph.graph.message import add_messages
-from langchain_google_genai import GoogleGenerativeAIEmbeddings
-from pinecone import Pinecone, ServerlessSpec
-from langchain_pinecone import PineconeVectorStore
-from typing import TypedDict, List, Sequence, Annotated
+from typing import TypedDict, List, Annotated, Optional, Any
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
-from langchain_google_genai import ChatGoogleGenerativeAI
 from langgraph.checkpoint.sqlite import SqliteSaver
 from langchain_openai import ChatOpenAI
-from utils.tools import send_mail_to_human_agent_sync
+from utils.tools import send_mail_to_human_agent_sync, retriever_tool
+from langgraph.checkpoint.postgres import PostgresSaver 
+from psycopg import Connection
 
 from config.access_keys import accessKeys
-from .enhanced_nlp_pipeline import enhanced_nlp, EnhancedAnalyzedQuery
 
 # DEFINE THE STRUCTURED OUTPUT MODEL
-class AnalyzedQuery(BaseModel):
-    """A model to hold the structured analysis of a user's query."""
-    intent: str = Field(description="Classify the user's intent. Must be one of: 'technical_question', 'greeting', 'general_chat'.")
-    sentiment: str = Field(description="The user's sentiment, e.g., 'positive', 'neutral', 'negative'.")
-    complexity_score: int = Field(description="A score from 1-10 for query difficulty.")
-    response: str = Field(description="A natural, human-like response to the user's message. This is what the user will see.")
+class ComprehensiveAnalysis(BaseModel):
+    """Complete analysis of user query in one structured output"""
+    intent: str = Field(description="Primary intent: technical_question, product_inquiry, greeting, etc.")
+    intent_confidence: float = Field(description="Confidence score 0.0-1.0")
+    sub_intent: str = Field(description="More specific intent category")
+    
+    sentiment: str = Field(description="positive, negative, or neutral")
+    sentiment_score: float = Field(description="Sentiment intensity -1.0 to 1.0")
+    
+    complexity_score: int = Field(description="Query complexity 1-10")
+    complexity_factors: List[str] = Field(description="What makes the users query complex")
+    
+    entities: List[str] = Field(description="Key entities: products, technologies, issues")
+    keywords: List[str] = Field(description="Important keywords from the users query")
+    
+    user_type: str = Field(description="technical, business, or general")
+    
+    response: str = Field(description="The actual response to send to user")
+    
+    reasoning: str = Field(description="Why these classifications were made")
 
-os.environ["GOOGLE_API_KEY"] = accessKeys.GEMINI_API_KEY
+
 os.environ["OPENAI_API_KEY"] = accessKeys.OPENAI_API_KEY
 
-SQLITE_DB = accessKeys.SQLITE_DB_PATH
+DB_URI = accessKeys.POSTGRES_MEMORY_URL
 
-embed_model = GoogleGenerativeAIEmbeddings(model="models/text-embedding-004")
+connection_kwargs = {
+    "autocommit": True,
+    "prepare_threshold": 0,
+}
 
-pc = Pinecone(api_key=accessKeys.pinecone_api)
-spec = ServerlessSpec(cloud="aws", region="us-east-1")
-index_name = 'eev-ai-unstructured-data'
-index = pc.Index(index_name)
-vectorstore = PineconeVectorStore(index=index, embedding=embed_model, text_key="text")
+conn = Connection.connect(DB_URI, **connection_kwargs)
+checkpointer = PostgresSaver(conn)
+checkpointer.setup()
 
 # UPDATE THE GRAPH'S STATE to use enhanced analysis
 class MessagesState(TypedDict):
-    messages: Annotated[Sequence[AnyMessage], add_messages]
-    analysis: EnhancedAnalyzedQuery
+    messages: Annotated[List[AnyMessage], add_messages]
+    analysis: Optional[ComprehensiveAnalysis]
 
-llm = ChatOpenAI(model="gpt-4o-mini-2024-07-18")
+llm = ChatOpenAI(model="gpt-4o-mini-2024-07-18", temperature=0.1)  
 
-@tool
-def retriever_tool(query: str) -> str:
-    """Retrieve FAQ data for Optimus or Branch systems."""
-    if not query.strip():
-        return "Error: Please provide a search query"
-    try:
-        results = vectorstore.similarity_search(query.strip(), k=3)
-        if not results:
-            return f"No information found for '{query}'"
-        output = ""
-        for i, doc in enumerate(results, 1):
-            text = doc.metadata.get('text', doc.page_content)
-            output += f"Result {i}: {text}\n\n"
-        return output
-    except Exception as e:
-        return f"Search failed: {str(e)}"
-
-tools = [retriever_tool, send_mail_to_human_agent_sync]
+tools = [retriever_tool, send_mail_to_human_agent_sync ]
 tool_node = ToolNode(tools=tools)
 
-# ENHANCED PROMPT TEMPLATE with user type awareness
-prompt = ChatPromptTemplate.from_messages([
+#customer agent prompt
+agent_prompt = ChatPromptTemplate.from_messages([
+    ("system", """You're eev AI assistant, with the personality of a helpful, witty, and slightly sarcastic genius like Tony Stark. Your job is to attend to the user's query and ensure they are satisfied, using your unique persona.
+
+Here is a pre-analysis of the user's latest message to help you decide what to do. Use this analysis to form a better response and decide if you need to use a tool.
+
+[PRE-ANALYSIS OF USER'S QUERY]:
+{analysis_summary}
+
+You have access to two tools:
+1. retriever_tool: Contains basic info about estrabillio, optimus ai and branch. Use this for information-based queries.
+2. send_mail_to_human_agent_sync: Use this to escalate queries to a human agent if the information is not sufficient or the user's request is too complex.
+"""),
+    MessagesPlaceholder(variable_name="query")
+])
+
+finalizer_prompt = ChatPromptTemplate.from_messages([
     ("system", """
-    You are Eev, a friendly, empathetic, and knowledgeable AI customer support specialist who creates personalized experiences for each user.
-    
-    PERSONALIZATION GUIDELINES:
-    - Use warm, welcoming greetings like "Hello there!" or "Hi! How can I help you today?"
-    - Reference their user type and background when relevant: "I see you're working with our API..." or "Based on your {user_type} background..."
-    - Tailor your communication style to match their expertise level and personality
-    - Remember and reference details from the current conversation to show you're actively listening
-    - Use personalized sign-offs that match the conversation tone and their specific situation
-    
-    SERVICE BOUNDARIES:
-    When you cannot help with something or need to set boundaries, use phrases like:
-    - "Ooh, sorry we don't offer this service, but here's what I can help you with instead..."
-    - "Unfortunately, we don't provide support for that particular feature, however..."
-    - "I'm afraid that's outside our service scope, but I'd be happy to assist with..."
-    
-    RESPONSE STYLE ADAPTATION:
-    - Respond in a natural, human-like, conversational style that mirrors the user's communication preferences
-    - Use the user's intent ({intent}), sentiment ({sentiment}), and complexity level ({complexity_score}/10) to craft your response
-    - Match their formality level: professional for business users, casual for general users, technical for developers
-    
-    ESCALATION PROTOCOLS:
-    You have access to the send_mail_to_human_agent_sync tool for escalating complex issues. Use this tool when:
-    - Complexity score is 8-10 (highly complex technical issues)
-    - User shows clear frustration, anger, or urgency (negative sentiment with high intensity)
-    - Issues require human expertise (account-specific problems, billing disputes, custom integrations)
-    - You cannot resolve the issue with available knowledge or tools
-    - User explicitly requests human assistance
-    
-    When escalating:
-    1. First acknowledge the user's concern: "I understand this is important to you, and I want to make sure you get the best possible help."
-    2. Use the send_mail_to_human_agent_sync tool with a comprehensive summary including:
-       - User's specific issue and context
-       - Their user type and technical background
-       - Steps already attempted or discussed
-       - Urgency level based on sentiment and complexity
-    3. Inform the user: "I've escalated your case to our human specialists who will follow up with you shortly. They'll have all the context from our conversation."
-    4. Provide any immediate helpful information while they wait
-    
-    CONVERSATION CLOSURE:
-    - When conversations are ending (user says 'thanks', 'bye', etc.), provide a personalized closing that references what you helped them with
-    - Include a brief, relevant summary: "Great chatting with you about [specific topic]! You should be all set with [solution provided]."
-    - Always offer future assistance: "Feel free to reach out anytime if you need more help!"
+    You are a comprehensive query analyzer. Analyze the user's message and provide detailed structured output including:
 
-    AVAILABLE TOOLS:
-    - retriever_tool: Use for searching FAQ and knowledge base information
-    - send_mail_to_human_agent_sync: Use for escalating complex issues to human agents
-    
-    User Profile Information:
-    - User Type: {user_type}
-    - Intent: {intent} (confidence: {intent_confidence})
-    - Sub-intent: {sub_intent}
-    - Sentiment: {sentiment} (score: {sentiment_score})
-    - Complexity Level: {complexity_score}/10
-    - Key Entities: {entities}
-    - Keywords: {keywords}
+    1. INTENT CLASSIFICATION: Determine primary intent (technical_question, product_inquiry, greeting, sales_inquiry, complaint, etc.) with confidence score
+    2. SENTIMENT ANALYSIS: Classify sentiment (positive/negative/neutral) with intensity score (-1.0 to 1.0)
+    3. COMPLEXITY ASSESSMENT: Rate complexity 1-10 and identify contributing factors
+    4. ENTITY EXTRACTION: Identify key entities (products, technologies, issues, names)
+    5. KEYWORD EXTRACTION: Extract important keywords and phrases
+    6. USER TYPE: Classify as technical, business, or general user based on language
+    7. RESPONSE GENERATION: Create a helpful, empathetic first-draft response.
+    8. REASONING: Explain your classification decisions
 
-    PERSONALIZED RESPONSE STRATEGIES BY USER TYPE:
-    
-    Technical users:
-    - Use professional greetings and technical terms they're familiar with
-    - Provide detailed technical information, code examples, API references
-    - Assume higher baseline knowledge but still explain complex concepts clearly
-    - For complex technical issues (score 8+), escalate to specialized technical support
-    
-    Business users:
-    - Address them professionally and reference their business context
-    - Focus on features, benefits, ROI, implementation timelines
-    - Use industry-specific language when appropriate
-    - For business-critical issues, prioritize escalation to ensure minimal disruption
-    
-    General users:
-    - Use friendly, approachable language with warm greetings
-    - Use simple language, provide step-by-step guidance
-    - Avoid jargon unless necessary (then explain it)
-    - Be patient and thorough, escalate if they seem confused or frustrated
-
-    Based on the analysis, the user's message requires {mode_string}.
-
-    Your task is to provide a helpful, personalized response that matches the user's expertise level and addresses their specific intent. Use the escalation tool when appropriate to ensure users get the best possible support experience.
+    Be thorough and accurate in your analysis.
     """),
-    MessagesPlaceholder(variable_name="messages")
+    MessagesPlaceholder(variable_name="message")
 ])
 
 # A chain for the agent to decide whether to call a tool
-tool_calling_chain = prompt | llm.bind_tools(tools)
+tool_calling_chain = agent_prompt | llm.bind_tools(tools)
 
 # A chain for the final node to generate the structured output
-structured_output_chain = prompt | llm.with_structured_output(AnalyzedQuery)
+structured_output_chain = finalizer_prompt | llm.with_structured_output(ComprehensiveAnalysis)
+
+def analyse_query(state: MessagesState):
+    user_query = state["messages"]
+
+    analysis_input = [user_query[-1]]
+
+    final_response = structured_output_chain.invoke({"message": analysis_input})
+
+    return {"analysis": final_response}
 
 def customer_agent_node(state: MessagesState):
-    analysis = state.get("analysis")
-    if analysis:
-        # Only greet if intent is a greeting
-        if analysis.intent in ["greeting", "hello", "hi"]:
-            analysis.response = (
-                "Hello! 👋 I'm Eev, your friendly customer support agent. "
-                "How can I assist you today?"
-            )
-            return {"messages": [AIMessage(content=analysis.response)], "analysis": analysis}
-
-        # Empathetic response for troubleshooting/negative sentiment
-        if analysis.intent in ["troubleshooting", "bug_report", "issue", "problem", "integration_help"] or analysis.sentiment == "negative":
-            # analysis.response = (
-            #     "I'm really sorry you're experiencing this critical issue with your integration. "
-            #     "Let's work together to resolve it as quickly as possible. "
-            #     "Could you please provide more details about the error messages or steps you've tried so far? "
-            #     "I'm here to help you every step of the way."
-            # )
-            # return {"messages": [AIMessage(content=analysis.response)], "analysis": analysis}
-            pass
-
-        # For information-seeking intents, use the retriever tool
-        # info_intents = [
-        #     "technical_question", "product_inquiry", "general_information",
-        #     "account_support", "integration_help", "feature_request", "pricing_query", "user_feedback"
-        # ]
-        # if analysis.intent in info_intents:
-        #     kb_result = retriever_tool(state["messages"][-1].content)
-        #     analysis.response = (
-        #         f"As your support agent, here's what I found for you:\n\n{kb_result}\n\n"
-        #         "If you need more details or have another question, just let me know!"
-        #     )
-        #     return {"messages": [AIMessage(content=analysis.response)], "analysis": analysis}
-
-        # ...existing context-aware prompt logic for other cases...
-        mode_string = "tool assistance" if analysis.requires_tools else "direct response"
-        contextual_prompt = prompt.partial(
-            user_type=analysis.user_type,
-            intent=analysis.intent,
-            intent_confidence=analysis.intent_confidence,
-            sub_intent=analysis.sub_intent,
-            sentiment=analysis.sentiment,
-            sentiment_score=analysis.sentiment_score,
-            complexity_score=analysis.complexity_score,
-            entities=[e.text for e in analysis.entities],
-            keywords=analysis.keywords,
-            requires_tools=analysis.requires_tools,
-            mode_string=mode_string,
-        )
-        chain = contextual_prompt | llm.bind_tools(tools)
-        response_message = chain.invoke({"messages": state["messages"]})
-
-        # Fallback: If response is empty, set a default message
-        # content = getattr(response_message, "content", "")
-        # if not content or not str(content).strip():
-        #     content = "I'm Eev, your AI assistant. How can I help you today?"
-        # analysis.response = str(content)
-        return {"messages": [response_message], "analysis": analysis}
-    else:
-        # fallback logic
-        fallback_msg = "I'm Eev, your AI assistant. How can I help you today?"
-        return {"messages": [AIMessage(content=fallback_msg)], "analysis": analysis}
-
-def structured_output_node(state: MessagesState):
-    """
-    This node takes the final response from the agent, populates it into the
-    analysis object, and adds final metadata like escalation flags.
-    """
+    # Get both the analysis object and the message history from the state
     analysis = state["analysis"]
-    
-    # The final response from the agent is the last message in the state
-    last_message = state["messages"][-1]
-    
-    # Get the text content from that final message
-    final_response_content = ""
-    if isinstance(last_message, AIMessage):
-        final_response_content = last_message.content
+    messages = state["messages"]
 
-    # If the content is empty for any reason, use a safe fallback
-    if not final_response_content:
-        final_response_content = "I seem to have lost my train of thought. Could you please ask again?"
+    # Format the analysis into a string for the prompt
+    analysis_summary = f"""
+    - Intent: {analysis.intent} (Confidence: {analysis.intent_confidence:.2f})
+    - Sentiment: {analysis.sentiment} (Score: {analysis.sentiment_score:.2f})
+    - Complexity: {analysis.complexity_score}/10
+    - Key Entities: {', '.join(analysis.entities)}
+    - AI's initial thought for a response: "{analysis.response}"
+    """
+    # Invoke the chain, passing BOTH the analysis and the message history
+    agent_response = tool_calling_chain.invoke({
+        "analysis_summary": analysis_summary,
+        "query": messages
+    })
 
-    # **THIS IS THE KEY FIX**: Update analysis.response with the actual final answer
-    analysis.response = final_response_content
+    return {"messages": [agent_response]}
 
-    # Now, perform the final metadata checks using this final response
-    escalate = False
-    conversation_summary = ""
-    conversation_ended = False
+def tools_condition(state: MessagesState):
+    messages = state.get("messages", [])
+    if not messages:
+        raise ValueError("No messages found in state")
 
-    # Escalation logic
-    if analysis.complexity_score >= 9 or analysis.sentiment == "negative":
-        escalate = True
-        conversation_summary = (
-            f"Escalation required. Intent: {analysis.intent}, "
-            f"Complexity: {analysis.complexity_score}, "
-            f"Sentiment: {analysis.sentiment}. "
-            f"Summary: {analysis.response}"
+    ai_message = messages[-1]
+
+    # Check if the last message has tool calls
+    if hasattr(ai_message, "tool_calls") and ai_message.tool_calls:
+        # Count all previous tool calls in the conversation
+        tool_call_count = sum(
+            1 for msg in messages if hasattr(msg, "tool_calls") and msg.tool_calls
         )
 
-    # Conversation end detection (check the user's last message)
-    last_user_message = ""
-    for msg in reversed(state["messages"]):
-        if isinstance(msg, HumanMessage):
-            last_user_message = msg.content.lower()
-            break
-            
-    if any(phrase in last_user_message for phrase in ["thank you", "thanks", "bye", "goodbye", "that will be all"]):
-        conversation_ended = True
-        conversation_summary = (
-            f"Conversation ended. Intent: {analysis.intent}, "
-            f"Summary: {analysis.response}"
-        )
+        if tool_call_count < 3:
+            return "tools"
 
-    # Attach these to the analysis object for the final API response
-    analysis.escalate = escalate
-    analysis.conversation_summary = conversation_summary
-    analysis.conversation_ended = conversation_ended
+    return "end"
 
-    # The state is now complete and correct
-    return {"messages": state["messages"], "analysis": analysis}
-
-
-# DEFINE CONDITIONAL LOGIC
-def tool_conditions(state: MessagesState):
-    """A more robust conditional check."""
-    last_message = state["messages"][-1]
-    # Only AIMessage may have tool_calls; check type before accessing
-    if isinstance(last_message, AIMessage) and getattr(last_message, "tool_calls", None):
-        return "continue_tool"
-    # If the last message is a ToolMessage, it means the tool has just run.
-    # We should go back to the agent to let it process the new info.
-    if isinstance(last_message, ToolMessage):
-        return "continue_agent"
-    # Otherwise, we're ready to generate the final response.
-    else:
-        return "end"
-
-# Use the synchronous SqliteSaver with a direct connection
-# conn = sqlite3.connect(SQLITE_DB, check_same_thread=False)
-# memory = SqliteSaver(conn=conn)
 
 workflow = StateGraph(MessagesState)
 
+#creating the nodes
 workflow.add_node("agent", customer_agent_node)
-workflow.add_node("tool_node", tool_node)
-workflow.add_node("final_answer_node", structured_output_node)
+workflow.add_node("tools", tool_node)
+workflow.add_node("analyse", analyse_query)
 
-workflow.set_entry_point("agent")
+#edges
+workflow.add_edge(START, "analyse")
+workflow.add_edge("analyse", "agent")
+workflow.add_conditional_edges("agent", tools_condition, {
+    "tools": "tools",
+    "end": END
+})
+workflow.add_edge("tools", "agent")
 
-workflow.add_conditional_edges(
-    "agent",
-    tool_conditions,
-    {
-        "continue_tool": "tool_node",
-        "end": "final_answer_node",
-    },
-)
-
-workflow.add_edge("tool_node", "agent")
-workflow.add_edge("final_answer_node", END)
-
-# graph = workflow.compile(checkpointer=memory)
-
-def invoke_agent_with_analysis(user_input: str, session_id: str) -> EnhancedAnalyzedQuery:
+def invoke_agent_with_analysis(user_input: str, session_id: str):
     """
     Enhanced invocation with comprehensive NLP analysis.
     This function now compiles the graph on each call to ensure thread safety.
     """
 
-    with SqliteSaver.from_conn_string(SQLITE_DB) as memory:
-        # The graph is compiled inside the 'with' block using the valid 'memory' object.
-        graph = workflow.compile(checkpointer=memory)
+    graph = workflow.compile(checkpointer=checkpointer)
 
-        # Perform enhanced NLP analysis first
-        analysis = enhanced_nlp.analyze_query(user_input, session_id)
-        
-        config = {"configurable": {"thread_id": session_id}}
-        
-        # The input for the graph includes the new message and the analysis object.
-        graph_input = {
-            "messages": [HumanMessage(content=user_input)],
-            "analysis": analysis
-        }
-        
-        # The graph is invoked with the new input and the config.
-        final_state = graph.invoke(graph_input, config=config)
-        
-        # The final analysis is extracted from the result.
-        analysis_result = final_state['analysis']
-        
-        return analysis_result
+    
+    config = {"configurable": {"thread_id": session_id}}
+    
+    # The input for the graph includes the new message and the analysis object.
+    graph_input = {
+        "messages": [HumanMessage(content=user_input)]
+    }
+    
+    # The graph is invoked with the new input and the config.
+    final_state = graph.invoke(graph_input, config=config)
+    return final_state

@@ -9,7 +9,7 @@ from fastapi import UploadFile, HTTPException
 from openai import OpenAI
 from pydantic import BaseModel, Field
 from typing import List
-from utils.enhanced_nlp_pipeline import ExtractedEntity, EnhancedAnalyzedQuery
+from utils.tier_3_utils import ComprehensiveAnalysis
 
 from config.access_keys import accessKeys
 from utils.tier_3_utils import invoke_agent_with_analysis
@@ -35,13 +35,9 @@ class VoiceResponse(BaseModel):
     sentiment_score: float
     complexity_score: int
     complexity_factors: List[str]
-    entities: List[ExtractedEntity]  # Changed from List[dict] to the proper type
+    entities: List[str] 
     keywords: List[str]
     user_type: str
-    requires_tools: bool
-    escalate: bool
-    conversation_summary: str
-    conversation_ended: bool
     transcription_model_used: str
     tts_model_used: str
     voice_used: str
@@ -248,16 +244,22 @@ class VoiceProcessor:
         
         # Process with existing AI (Tier 3)
         loop = asyncio.get_event_loop()
-        ai_analysis: EnhancedAnalyzedQuery = await loop.run_in_executor(
+        final_agent_state = await loop.run_in_executor(
             None,  # Use the default thread pool executor
             invoke_agent_with_analysis,
             transcribed_text,
             session_id
         )
 
+        #analysis of the users query
+        ai_analysis = final_agent_state['analysis']
+
+        #agent response
+        agent_response_text = final_agent_state['messages'][-1].content
+
         # Convert AI response to speech using OpenAI TTS
         audio_file_path = await self.generate_tts_audio(
-            text=ai_analysis.response,
+            text=agent_response_text,
             voice=voice,
             session_id=session_id,
             model=tts_model,
@@ -268,7 +270,7 @@ class VoiceProcessor:
         return VoiceResponse(
             session_id=session_id,
             transcribed_text=transcribed_text,
-            ai_response_text=ai_analysis.response,
+            ai_response_text=agent_response_text,
             audio_file_path=audio_file_path,
             intent=ai_analysis.intent,
             intent_confidence=ai_analysis.intent_confidence,
@@ -280,10 +282,6 @@ class VoiceProcessor:
             entities=ai_analysis.entities,
             keywords=ai_analysis.keywords,
             user_type=ai_analysis.user_type,
-            requires_tools=ai_analysis.requires_tools,
-            escalate=getattr(ai_analysis, 'escalate', False),
-            conversation_summary=getattr(ai_analysis, 'conversation_summary', ""),
-            conversation_ended=getattr(ai_analysis, 'conversation_ended', False),
             transcription_model_used=transcription_model,
             tts_model_used=tts_model,
             voice_used=voice

@@ -27,8 +27,8 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(
 router = APIRouter(tags=["Freshdesk"])
 
 # Configuration
-FRESHDESK_API_KEY = "G8YaoKsBFMHMx72qrL"
-FRESHDESK_DOMAIN = "optimusai-support.freshdesk.com"
+FRESHDESK_API_KEY = "Ojsifbdj7DwNuipIXQxs"
+FRESHDESK_DOMAIN = "optimusai-assist.freshdesk.com"
 TICKET_QUEUE = "freshdesk_tickets"
 
 # Redis Configuration

@@ -5,10 +5,6 @@ class RequestPayload(BaseModel):
     user_query: str
     session_id: str
     
-class EntityResponse(BaseModel):
-    text: str
-    label: str
-    confidence: float
 
 class PayloadResponse(BaseModel):
     agent_response: str
@@ -20,13 +16,10 @@ class PayloadResponse(BaseModel):
     sentiment_score: float
     complexity_score: int
     complexity_factors: List[str]
-    entities: List[EntityResponse]
+    entities: List[str]
     keywords: List[str]
     user_type: str
-    requires_tools: bool
-    escalate: Optional[bool] = False
-    conversation_summary: Optional[str] = ""
-    conversation_ended: Optional[bool] = False
+
 
 class TicketResponse(BaseModel):
     data: dict[str, Any]
