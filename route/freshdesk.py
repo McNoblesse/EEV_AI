@@ -50,7 +50,7 @@ def get_redis_client():
             username=REDIS_USERNAME,
             password=REDIS_PASSWORD,
             db=REDIS_DB,
-            decode_responses=False,
+            decode_responses=False,  # Keep this False to match worker
             socket_connect_timeout=10,
             socket_timeout=10,
             retry_on_timeout=True
@@ -133,14 +133,21 @@ async def freshdesk_webhook_handler(request: Request, db: db_session):
             message_body = {
                 "ticket_id": ticket_id,
                 "description_text": full_ticket_data.get("description_text", ""),
-                "message_id": new_message.id
+                "message_id": new_message.id,
+                "message_type": "new"  # Add this for consistency
             }
 
             # Send to Redis queue for processing
             redis_client = get_redis_client()
-            redis_client.lpush(TICKET_QUEUE, json.dumps(message_body).encode())
-
-            logging.info(f"Ticket {ticket_id} queued for processing")
+            
+            # FIX: Remove .encode() - let Redis handle the encoding
+            message_json = json.dumps(message_body)
+            redis_client.lpush(TICKET_QUEUE, message_json)
+            
+            # Add verification log
+            queue_length = redis_client.llen(TICKET_QUEUE)
+            logging.info(f"Ticket {ticket_id} queued for processing. Queue length: {queue_length}")
+            
             result["message_status"] = f"Ticket {ticket_id} queued for processing"
 
             return result
@@ -255,9 +262,15 @@ async def updated_tickets_webhook(request: Request, db: db_session):
 
                 # Send to Redis queue for processing
                 redis_client = get_redis_client()
-                redis_client.lpush(TICKET_QUEUE, json.dumps(message_body).encode())
-
-                logging.info(f"Reply for ticket {ticket_id} queued for processing")
+                
+                # FIX: Remove .encode() - let Redis handle the encoding
+                message_json = json.dumps(message_body)
+                redis_client.lpush(TICKET_QUEUE, message_json)
+                
+                # Add verification log
+                queue_length = redis_client.llen(TICKET_QUEUE)
+                logging.info(f"Reply for ticket {ticket_id} queued for processing. Queue length: {queue_length}")
+                
                 result["message_status"] = f"Reply for ticket {ticket_id} queued for processing"
 
                 return result
