@@ -24,6 +24,7 @@ ARG REDIS_HOST
 ARG REDIS_PORT
 ARG REDIS_PASSWORD
 ARG REDIS_USERNAME
+ARG POSTGRES_MEMORY_URL
 
 # Set environment variables inside the container from the build-time arguments
 ENV pinecone_api=$pinecone_api
@@ -45,6 +46,7 @@ ENV REDIS_HOST=$REDIS_HOST
 ENV REDIS_PORT=$REDIS_PORT
 ENV REDIS_PASSWORD=$REDIS_PASSWORD
 ENV REDIS_USERNAME=$REDIS_USERNAME
+ENV POSTGRES_MEMORY_URL=$POSTGRES_MEMORY_URL
 
 # Install supervisor and create log directories
 RUN apt-get update && apt-get install -y supervisor && \

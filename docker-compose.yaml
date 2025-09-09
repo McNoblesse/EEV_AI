@@ -22,6 +22,7 @@ services:
         - REDIS_PORT=${REDIS_PORT}
         - REDIS_PASSWORD=${REDIS_PASSWORD}
         - REDIS_USERNAME=${REDIS_USERNAME}
+        - POSTGRES_MEMORY_URL=$POSTGRES_MEMORY_URL
     container_name: eev-ai-backend
     ports:
       - "8056:8056"
