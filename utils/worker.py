@@ -17,9 +17,9 @@ from utils.format_ai_response import clean_ai_response, format_llm_output_for_em
 FRESHDESK_API_KEY = "Ojsifbdj7DwNuipIXQxs"
 FRESHDESK_DOMAIN = "optimusai-assist.freshdesk.com"
 TICKET_QUEUE = "freshdesk_tickets"
-REDIS_HOST = "138.197.129.114"
-REDIS_PORT = 5468
-REDIS_PASSWORD = "2EGVdBboonI6Jzk6J3k04qPeyqharrZoYGMKClDhus74oWG5nYgDWSP4NyIpHS7q"
+REDIS_HOST = "tramway.proxy.rlwy.net"
+REDIS_PORT = 25997
+REDIS_PASSWORD = "pzcPfJKAKjgDeEjbhSmdMyglwtbTgCPm"
 REDIS_USERNAME = "default"
 REDIS_DB = 0
 
