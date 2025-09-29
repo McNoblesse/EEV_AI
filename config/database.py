@@ -4,7 +4,7 @@ from sqlalchemy.orm import sessionmaker
 from .access_keys import accessKeys
 
 # Your PostgreSQL connection URL
-DATABASE_URL = accessKeys.POSTGRES_URL
+DATABASE_URL = accessKeys.POSTGRES_MEMORY_URL
 
 engine = create_engine(DATABASE_URL, pool_pre_ping=True)
 

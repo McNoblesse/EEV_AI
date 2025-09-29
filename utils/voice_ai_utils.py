@@ -2,27 +2,30 @@ import os
 import tempfile
 import asyncio
 from pathlib import Path
-from typing import Optional, Tuple
-import aiofiles
-import aiohttp
+from typing import Optional
 from fastapi import UploadFile, HTTPException
 from openai import OpenAI
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 from typing import List
-from utils.tier_3_utils import ComprehensiveAnalysis
-
 from config.access_keys import accessKeys
-from utils.tier_3_utils import invoke_agent_with_analysis
+import logging
+from langchain_core.messages import HumanMessage
+
+# Import the simple analysis function instead of full multi-step reasoning
+from utils.tier_3_utils import analyze_query_simple
+
+logger = logging.getLogger(__name__)
 
 # Configuration
 client = OpenAI(api_key=accessKeys.OPENAI_API_KEY)
 
 class VoiceRequest(BaseModel):
     session_id: str
-    voice: Optional[str] = "alloy"  # OpenAI TTS voice
+    voice: Optional[str] = "coral"
     transcription_model: Optional[str] = "gpt-4o-transcribe"
     tts_model: Optional[str] = "gpt-4o-mini-tts"
-    
+    channel: Optional[str] = "voice"
+
 class VoiceResponse(BaseModel):
     session_id: str
     transcribed_text: str
@@ -30,54 +33,43 @@ class VoiceResponse(BaseModel):
     audio_file_path: str
     intent: str
     intent_confidence: float
-    sub_intent: str
     sentiment: str
     sentiment_score: float
     complexity_score: int
-    complexity_factors: List[str]
-    entities: List[str] 
-    keywords: List[str]
-    user_type: str
     transcription_model_used: str
     tts_model_used: str
     voice_used: str
+    processing_time_ms: int
 
 class VoiceProcessor:
     def __init__(self):
         self.temp_dir = Path("static/temp_audio")
         self.temp_dir.mkdir(parents=True, exist_ok=True)
         
-        # Updated: More comprehensive format checking
         self.supported_mime_types = {
             'audio/mp3', 'audio/mpeg', 'audio/wav', 'audio/m4a', 
             'audio/mp4', 'audio/mpga', 'audio/webm', 'audio/ogg',
-            'audio/x-m4a', 'audio/mp4a-latm',  # Additional M4A variants
-            'application/octet-stream'  # Some browsers send this for audio files
+            'audio/x-m4a', 'audio/mp4a-latm', 'application/octet-stream'
         }
         
-        # Check by file extension as fallback
         self.supported_extensions = {
             '.mp3', '.mpeg', '.wav', '.m4a', '.mp4', '.mpga', '.webm', '.ogg'
         }
         
-        # File size limits (25MB max - OpenAI limit)
         self.max_file_size = 25 * 1024 * 1024
         
-        # Available transcription models
         self.transcription_models = {
             "gpt-4o-transcribe": "Highest quality, latest model",
             "gpt-4o-mini-transcribe": "Good quality, faster processing", 
             "whisper-1": "Original model with more format options"
         }
         
-        # Available TTS models
         self.tts_models = {
             "gpt-4o-mini-tts": "High quality, cost-effective",
             "tts-1": "Standard quality, fastest",
             "tts-1-hd": "Higher quality, slower"
         }
         
-        # Available OpenAI voices
         self.available_voices = {
             "alloy": "Balanced, neutral voice",
             "echo": "Clear, professional voice", 
@@ -91,7 +83,6 @@ class VoiceProcessor:
     async def validate_audio_file(self, file: UploadFile) -> bool:
         """Enhanced validation for uploaded audio files"""
         
-        # Check file extension as primary validation
         if file.filename:
             file_extension = Path(file.filename).suffix.lower()
             if file_extension not in self.supported_extensions:
@@ -100,12 +91,9 @@ class VoiceProcessor:
                     detail=f"Unsupported file extension: {file_extension}. Supported: {', '.join(self.supported_extensions)}"
                 )
         
-        # Check MIME type as secondary validation (some browsers send incorrect MIME types)
         if file.content_type and file.content_type not in self.supported_mime_types:
-            # Log the actual MIME type for debugging
-            print(f"Warning: Unexpected MIME type '{file.content_type}' for file '{file.filename}'. Proceeding based on file extension.")
+            logger.warning(f"Unexpected MIME type '{file.content_type}' for file '{file.filename}'")
         
-        # Check file size
         contents = await file.read()
         if len(contents) > self.max_file_size:
             raise HTTPException(
@@ -113,7 +101,6 @@ class VoiceProcessor:
                 detail=f"File too large. OpenAI limit: {self.max_file_size // 1024 // 1024}MB"
             )
         
-        # Reset file pointer
         await file.seek(0)
         return True
     
@@ -126,58 +113,49 @@ class VoiceProcessor:
         """Convert speech to text using OpenAI's latest models"""
         
         try:
-            # Validate model choice
             if model not in self.transcription_models:
-                model = "gpt-4o-transcribe"  # Default to highest quality
+                model = "gpt-4o-transcribe"
             
-            # Save uploaded file temporarily with correct extension
             if file.filename:
                 file_extension = Path(file.filename).suffix.lower()
             else:
-                file_extension = '.m4a'  # Default for unknown files
+                file_extension = '.m4a'
                 
             with tempfile.NamedTemporaryFile(delete=False, suffix=file_extension) as temp_file:
                 contents = await file.read()
                 temp_file.write(contents)
                 temp_file_path = temp_file.name
             
-            # Debug: Print file info
-            print(f"Processing audio file: {file.filename}, MIME: {file.content_type}, Size: {len(contents)} bytes")
+            logger.info(f"Transcribing audio: {file.filename}, Size: {len(contents)} bytes")
             
-            # Transcribe using OpenAI's client
             with open(temp_file_path, 'rb') as audio_file:
-                
                 if model in ["gpt-4o-transcribe", "gpt-4o-mini-transcribe"]:
-                    # New models only support json or text format
                     transcription = client.audio.transcriptions.create(
                         model=model,
                         file=audio_file,
-                        response_format=response_format  # "text" or "json"
+                        response_format=response_format
                     )
                 else:
-                    # whisper-1 supports more formats
                     transcription = client.audio.transcriptions.create(
                         model=model,
                         file=audio_file,
                         response_format=response_format
                     )
             
-            # Cleanup temp file
             os.unlink(temp_file_path)
             
-            # Handle response based on format
             if response_format == "text":
                 return transcription.strip()
             else:
                 return transcription.text.strip()
             
         except Exception as e:
-            # Cleanup on error
             if 'temp_file_path' in locals():
                 try:
                     os.unlink(temp_file_path)
                 except:
                     pass
+            logger.error(f"Transcription failed: {str(e)}")
             raise HTTPException(status_code=500, detail=f"Transcription failed: {str(e)}")
     
     async def generate_tts_audio(
@@ -191,19 +169,15 @@ class VoiceProcessor:
         """Convert text to speech using OpenAI TTS"""
         
         try:
-            # Validate voice choice
             if voice not in self.available_voices:
-                voice = "coral"  # Default to customer service voice
+                voice = "coral"
             
-            # Validate model choice
             if model not in self.tts_models:
-                model = "gpt-4o-mini-tts"  # Default to cost-effective model
+                model = "gpt-4o-mini-tts"
             
-            # Generate filename
             audio_filename = f"response_{session_id}_{int(asyncio.get_event_loop().time())}.mp3"
             audio_file_path = self.temp_dir / audio_filename
             
-            # Generate audio using OpenAI TTS with streaming
             with client.audio.speech.with_streaming_response.create(
                 model=model,
                 voice=voice,
@@ -213,12 +187,14 @@ class VoiceProcessor:
             ) as response:
                 response.stream_to_file(str(audio_file_path))
             
+            logger.info(f"Generated TTS audio: {audio_file_path}")
             return str(audio_file_path)
             
         except Exception as e:
+            logger.error(f"TTS generation failed: {str(e)}")
             raise HTTPException(status_code=500, detail=f"TTS generation failed: {str(e)}")
     
-    async def process_voice_request(
+    async def process_voice_simple(
         self, 
         audio_file: UploadFile, 
         session_id: str, 
@@ -227,12 +203,16 @@ class VoiceProcessor:
         tts_model: str = "gpt-4o-mini-tts",
         tts_instructions: str = "Speak like a friendly and knowledgeable customer support specialist"
     ) -> VoiceResponse:
-        """Complete voice-to-voice pipeline with OpenAI models"""
+        """
+        SIMPLIFIED voice processing for real-time responses
+        Uses direct analysis without multi-step reasoning
+        """
+        import time
+        start_time = time.time()
         
-        # Validate audio file
         await self.validate_audio_file(audio_file)
         
-        # Transcribe speech to text using OpenAI models
+        # Transcribe speech to text
         transcribed_text = await self.transcribe_audio(
             file=audio_file,
             model=transcription_model,
@@ -242,50 +222,63 @@ class VoiceProcessor:
         if not transcribed_text.strip():
             raise HTTPException(status_code=400, detail="No speech detected in audio")
         
-        # Process with existing AI (Tier 3)
-        loop = asyncio.get_event_loop()
-        final_agent_state = await loop.run_in_executor(
-            None,  # Use the default thread pool executor
-            invoke_agent_with_analysis,
-            transcribed_text,
-            session_id
-        )
-
-        #analysis of the users query
-        ai_analysis = final_agent_state['analysis']
-
-        #agent response
-        agent_response_text = final_agent_state['messages'][-1].content
-
-        # Convert AI response to speech using OpenAI TTS
+        logger.info(f"Session {session_id}: Transcribed text: {transcribed_text[:100]}...")
+        
+        # SIMPLE ANALYSIS - No multi-step reasoning for voice
+        analysis_result = await analyze_query_simple(transcribed_text, session_id)
+        
+        # Generate simple response based on analysis
+        ai_response = await self.generate_simple_response(transcribed_text, analysis_result)
+        
+        # Convert to speech
         audio_file_path = await self.generate_tts_audio(
-            text=agent_response_text,
+            text=ai_response,
             voice=voice,
             session_id=session_id,
             model=tts_model,
             instructions=tts_instructions
         )
         
-        # Return complete response
+        processing_time = int((time.time() - start_time) * 1000)
+        
+        logger.info(f"Voice processing complete for session {session_id} in {processing_time}ms")
+        
         return VoiceResponse(
             session_id=session_id,
             transcribed_text=transcribed_text,
-            ai_response_text=agent_response_text,
+            ai_response_text=ai_response,
             audio_file_path=audio_file_path,
-            intent=ai_analysis.intent,
-            intent_confidence=ai_analysis.intent_confidence,
-            sub_intent=ai_analysis.sub_intent,
-            sentiment=ai_analysis.sentiment,
-            sentiment_score=ai_analysis.sentiment_score,
-            complexity_score=ai_analysis.complexity_score,
-            complexity_factors=ai_analysis.complexity_factors,
-            entities=ai_analysis.entities,
-            keywords=ai_analysis.keywords,
-            user_type=ai_analysis.user_type,
+            intent=analysis_result.intent.value,
+            intent_confidence=analysis_result.intent_confidence,
+            sentiment=analysis_result.sentiment,
+            sentiment_score=analysis_result.sentiment_score,
+            complexity_score=analysis_result.complexity_score,
             transcription_model_used=transcription_model,
             tts_model_used=tts_model,
-            voice_used=voice
+            voice_used=voice,
+            processing_time_ms=processing_time
         )
+    
+    async def generate_simple_response(self, user_input: str, analysis) -> str:
+        """Generate simple, direct response for voice interactions"""
+        
+        # Simple greeting responses
+        user_input_lower = user_input.lower()
+        if any(word in user_input_lower for word in ['hello', 'hi', 'hey']):
+            return "Hello! I'm here to help. What can I assist you with today?"
+        
+        if any(word in user_input_lower for word in ['thank', 'thanks']):
+            return "You're welcome! Is there anything else I can help you with?"
+        
+        # Based on analysis, generate appropriate response
+        if analysis.intent.value == "greeting":
+            return "Hello! How can I assist you today?"
+        elif analysis.intent.value == "technical_question":
+            return f"I understand you have a technical question about {user_input}. Let me help you with that."
+        elif analysis.requires_human_escalation:
+            return "I understand this is important. Let me connect you with a human specialist who can help you better."
+        else:
+            return f"I'll help you with that. {user_input}"
     
     def get_available_models(self) -> dict:
         """Return available models and voices"""
@@ -306,8 +299,9 @@ class VoiceProcessor:
             if current_time - file_path.stat().st_mtime > (max_age_hours * 3600):
                 try:
                     file_path.unlink()
-                except:
-                    pass
+                    logger.info(f"Cleaned up old audio file: {file_path}")
+                except Exception as e:
+                    logger.warning(f"Failed to clean up {file_path}: {e}")
 
 # Global instance
 voice_processor = VoiceProcessor()

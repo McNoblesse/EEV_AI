@@ -6,87 +6,168 @@ def clean_ai_response(response_text):
     1. Removing code block markers like ```html and ```
     2. Removing references to FAQ
     3. Preserving formatting like line breaks
+    4. Enhanced markdown to plain text conversion
     """
+    if not response_text:
+        return ""
+    
     # Remove code block markers
-    response_text = response_text.replace("```html", "").replace("```", "")
+    response_text = re.sub(r'```(html)?|```', '', response_text)
 
     # Remove references to FAQ
-    response_text = response_text.replace("Based on our FAQ, ", "")
-    response_text = response_text.replace("According to our FAQ, ", "")
-    response_text = response_text.replace("From our FAQ, ", "")
-    response_text = response_text.replace("Our FAQ indicates that ", "")
+    faq_patterns = [
+        r'Based on our FAQ,\s*',
+        r'According to our FAQ,\s*', 
+        r'From our FAQ,\s*',
+        r'Our FAQ indicates that\s*',
+        r'As per our FAQ,\s*'
+    ]
+    
+    for pattern in faq_patterns:
+        response_text = re.sub(pattern, '', response_text, flags=re.IGNORECASE)
 
     # Clean up any trailing/leading whitespace
     response_text = response_text.strip()
 
-    # Convert markdown-style asterisks to plain text bullets
+    # Convert markdown-style formatting to plain text
     lines = response_text.split('\n')
-    for i, line in enumerate(lines):
-        if line.strip().startswith('*'):
-            # Replace markdown bullets with plain text bullets
-            lines[i] = '• ' + line.strip()[1:].strip()
-        elif '**' in line:
-            # Replace bold markdown with plain text
-            lines[i] = line.replace('**', '')
+    cleaned_lines = []
+    
+    for line in lines:
+        line = line.strip()
+        if not line:
+            continue
+            
+        # Replace markdown bullets with plain text bullets
+        if re.match(r'^[\*\-]\s+', line):
+            line = '• ' + re.sub(r'^[\*\-]\s+', '', line)
+        # Replace numbered lists
+        elif re.match(r'^\d+\.\s+', line):
+            line = re.sub(r'^\d+\.\s+', '', line)
+        # Remove bold/italic markdown but keep text
+        line = re.sub(r'\*\*(.*?)\*\*', r'\1', line)
+        line = re.sub(r'\*(.*?)\*', r'\1', line)
+        line = re.sub(r'_(.*?)_', r'\1', line)
+        
+        cleaned_lines.append(line)
 
-    # Rejoin the lines
-    response_text = '\n'.join(lines)
+    # Rejoin the lines with proper spacing
+    response_text = '\n'.join(cleaned_lines)
+    
+    # Remove excessive blank lines
+    response_text = re.sub(r'\n\s*\n', '\n\n', response_text)
 
     return response_text
 
 def format_llm_output_for_email(llm_text: str) -> str:
     """
     Converts raw LLM text with simple markdown into a structured HTML email body.
-    - Handles '###' and '**word**' as bold headings.
-    - Handles '-' and numbered lists as HTML bullet points.
-    - Wraps paragraphs in <p> tags for proper spacing.
-    - Wraps the entire output in a valid HTML document structure.
+    Enhanced version with better formatting and Freshdesk compatibility.
     """
     if not llm_text:
         return ""
 
+    # First clean the text
+    llm_text = clean_ai_response(llm_text)
+    
     html_parts = []
     in_list = False
+    in_paragraph = False
     
     lines = llm_text.strip().split('\n')
 
     for line in lines:
         line = line.strip()
 
-        # ✅ NEW: Use regex to replace **word** with <strong>word</strong>
-        line = re.sub(r'\*\*(.*?)\*\*', r'<strong>\1</strong>', line)
-
+        # Skip empty lines
         if not line:
             if in_list:
                 html_parts.append("</ul>")
                 in_list = False
+            if in_paragraph:
+                html_parts.append("</p>")
+                in_paragraph = False
             continue
 
-        if line.startswith("###"):
+        # Handle headings (### or **text** as bold headings)
+        if line.startswith("###") or (line.startswith("**") and line.endswith("**")):
             if in_list:
                 html_parts.append("</ul>")
                 in_list = False
+            if in_paragraph:
+                html_parts.append("</p>")
+                in_paragraph = False
+                
             heading_text = line.replace("###", "").strip()
-            if html_parts:
+            # Remove markdown bold if present
+            heading_text = re.sub(r'\*\*(.*?)\*\*', r'\1', heading_text)
+            
+            if html_parts:  # Add spacing if not first element
                 html_parts.append("<br>")
-            # The heading text might already be bolded by the regex, so we just add it.
-            html_parts.append(f"<strong>{heading_text.replace('<strong>', '').replace('</strong>', '')}</strong>")
+            html_parts.append(f"<strong>{heading_text}</strong><br>")
         
-        elif line.startswith("- ") or (line.split('.')[0].isdigit() and line[1:3] == '. '):
+        # Handle list items (- or * or numbered)
+        elif re.match(r'^[\*\-]\s+', line) or re.match(r'^\d+\.\s+', line):
             if not in_list:
                 html_parts.append("<ul>")
                 in_list = True
-            item_text = line.split(' ', 1)[1]
+                
+            item_text = re.sub(r'^[\*\-]\s+', '', line)
+            item_text = re.sub(r'^\d+\.\s+', '', item_text)
+            # Apply bold formatting to key phrases
+            item_text = re.sub(r'\*\*(.*?)\*\*', r'<strong>\1</strong>', item_text)
             html_parts.append(f"<li>{item_text}</li>")
         
+        # Handle regular paragraphs
         else:
             if in_list:
                 html_parts.append("</ul>")
                 in_list = False
-            html_parts.append(f"<p>{line}</p>")
+                
+            # Apply inline formatting
+            formatted_line = re.sub(r'\*\*(.*?)\*\*', r'<strong>\1</strong>', line)
+            formatted_line = re.sub(r'\*(.*?)\*', r'<em>\1</em>', formatted_line)
+            
+            if not in_paragraph:
+                html_parts.append(f"<p>{formatted_line}")
+                in_paragraph = True
+            else:
+                html_parts.append(f"<br>{formatted_line}")
 
+    # Close any open tags
     if in_list:
         html_parts.append("</ul>")
+    if in_paragraph:
+        html_parts.append("</p>")
 
     inner_html = "".join(html_parts)
-    return f"<html><body>{inner_html}</body></html>"
+    
+    # Wrap in Freshdesk-compatible HTML structure
+    return f"""<html>
+<body style="font-family: Arial, sans-serif; font-size: 14px; line-height: 1.5;">
+<div style="max-width: 600px; margin: 0 auto;">
+{inner_html}
+<br>
+<p style="color: #666; font-size: 12px;">
+This response was generated by EEV AI Assistant. If you need further assistance, please don't hesitate to ask.
+</p>
+</div>
+</body>
+</html>"""
+
+def format_analysis_for_display(analysis_result) -> str:
+    """
+    Format analysis results for display in logs or UI
+    """
+    if not analysis_result:
+        return "No analysis available"
+    
+    return f"""
+Analysis Results:
+- Intent: {getattr(analysis_result, 'intent', 'Unknown')} (confidence: {getattr(analysis_result, 'intent_confidence', 0):.2f})
+- Complexity: {getattr(analysis_result, 'complexity', 'Unknown')} (score: {getattr(analysis_result, 'complexity_score', 0)})
+- Sentiment: {getattr(analysis_result, 'sentiment', 'Unknown')} (score: {getattr(analysis_result, 'sentiment_score', 0):.2f})
+- User Type: {getattr(analysis_result, 'user_type', 'Unknown')}
+- Requires Escalation: {getattr(analysis_result, 'requires_human_escalation', False)}
+- Keywords: {', '.join(getattr(analysis_result, 'keywords', []))}
+"""
