@@ -3,14 +3,35 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import logging
 import uvicorn
+import os
 from fastapi.responses import JSONResponse
 from route.voice_ai_route import router as voice_router
 from route.tier_3_model import router as tier3_router
 from route.freshdesk import router as freshdesk_router
+from route.knowledge_base import router as knowledge_base_router
 from security.authentication import security_middleware
 from config.database import engine, Base
+from config.access_keys import accessKeys
 from utils.checkpoint_migrations import ensure_tables_and_report, init_postgres_checkpointer
 from utils.voice_ai_utils import voice_processor
+from route.tier_1_model import router as tier1_router
+from route.tier_2_model import router as tier2_router
+from route.whatsapp import router as whatsapp_router
+from route.smart_router import router as smart_router
+
+# Configure LangSmith Monitoring
+if hasattr(accessKeys, 'LANGCHAIN_TRACING_V2') and getattr(accessKeys, 'LANGCHAIN_TRACING_V2', '') == "true":
+    os.environ["LANGCHAIN_TRACING_V2"] = "true"
+    if hasattr(accessKeys, 'LANGCHAIN_API_KEY') and accessKeys.LANGCHAIN_API_KEY:
+        os.environ["LANGCHAIN_API_KEY"] = accessKeys.LANGCHAIN_API_KEY
+    if hasattr(accessKeys, 'LANGCHAIN_PROJECT') and accessKeys.LANGCHAIN_PROJECT:
+        os.environ["LANGCHAIN_PROJECT"] = accessKeys.LANGCHAIN_PROJECT
+    if hasattr(accessKeys, 'LANGCHAIN_ENDPOINT') and accessKeys.LANGCHAIN_ENDPOINT:
+        os.environ["LANGCHAIN_ENDPOINT"] = accessKeys.LANGCHAIN_ENDPOINT
+    print("✅ LangSmith tracing enabled")
+else:
+    os.environ["LANGCHAIN_TRACING_V2"] = "false"
+    print("ℹ️  LangSmith tracing disabled")
 
 # Configure logging
 logging.basicConfig(
@@ -87,6 +108,11 @@ app.middleware("http")(security_middleware)
 app.include_router(voice_router, prefix="/api/v1")
 app.include_router(tier3_router, prefix="/api/v1")
 app.include_router(freshdesk_router, prefix="/api/v1")
+app.include_router(knowledge_base_router)
+app.include_router(tier1_router, prefix="/eeVai")
+app.include_router(tier2_router, prefix="/eeVai")
+app.include_router(whatsapp_router)
+app.include_router(smart_router, prefix="/eeVai")
 
 # Health check endpoint
 @app.get("/")
@@ -159,6 +185,7 @@ async def system_status():
     """
     from config.database import SessionLocal
     from model.database_models import Conversation, AgentSession
+    from sqlalchemy import func
     
     db = SessionLocal()
     

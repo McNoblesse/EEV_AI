@@ -21,6 +21,11 @@ from config.access_keys import accessKeys
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Add Reasoning model for structured output
+class Reasoning(BaseModel):
+    reasoning: str
+    next_step: str  # e.g., "retrieve", "respond", "escalate"
+
 # Postgres DSN resolution
 def get_postgres_dsn():
     postgres_dsn = getattr(accessKeys, "POSTGRES_MEMORY_URL", None) or getattr(accessKeys, "POSTGRES_URL", None)
@@ -50,56 +55,46 @@ tools = [retriever_tool, send_mail_to_human_agent_sync, greeting_response_tool]
 tool_node = ToolNode(tools=tools)
 
 # Prompts for different stages
+reasoning_prompt = ChatPromptTemplate.from_messages([
+    ("system", """As eeV Assistant, reason step-by-step with empathy about the analysis. Use history to inform decisions—recall patterns, past issues, or preferences.
+
+Determine the next step: 'retrieve' if knowledge is needed, 'respond' for direct answers, 'escalate' if human help is required. Keep reasoning concise (under 100 words).
+
+For summarization requests: Note that a summary is needed, but do not generate it here.
+"""),
+    ("human", "Analysis: {analysis}\n\nUser Query: {current_input}\n\nHistory Summary: {history_summary}")
+])
+
 analysis_prompt = ChatPromptTemplate.from_messages([
-    ("system", """You are an advanced query analysis system. Analyze the user's input and determine:
+    ("system", """You are eeV Assistant, a friendly and knowledgeable customer support agent for Optimus AI Lab. Analyze the user's input precisely, considering conversation history for context.
 
-1. **Intent Classification**: What is the user trying to achieve?
-2. **Complexity Assessment**: How complex is this query?
-3. **Routing Decision**: What actions should be taken?
+Detect specific intents (e.g., 'product_inquiry' for chefbot building, not just 'general_question'). Use history to refine analysis.
 
-Available Tools:
-- retriever_tool: For FAQ and knowledge base searches
-- send_mail_to_human_agent_sync: For escalation to human agents
-- greeting_response_tool: For simple greetings and basic responses
-
-Response with a structured analysis following the ComprehensiveAnalysis schema.
+Available Tools: retriever_tool, send_mail_to_human_agent_sync, greeting_response_tool.
 """),
     MessagesPlaceholder(variable_name="messages")
 ])
 
-reasoning_prompt = ChatPromptTemplate.from_messages([
-    ("system", """Based on the analysis, determine the next steps. Use this reasoning framework:
-
-**Simple Queries** (greetings, basic info): Respond directly or use greeting tool
-**Moderate Queries** (FAQ, product info): Use retriever tool first
-**Complex Queries** (technical issues): May require multiple steps
-**Escalation Needed**: When sentiment is negative or query is too complex
-
-Think step by step and decide on the appropriate action.
-"""),
-    ("human", "Analysis: {analysis}\n\nUser Query: {current_input}")
-])
-
 response_prompt = ChatPromptTemplate.from_messages([
-    ("system", """You are eev AI, a professional customer service assistant. Respond to the user based on the analysis and available context.
+    ("system", """You are eeV Assistant, a friendly customer support agent. Respond conversationally, empathetically, and proactively.
 
 Guidelines:
-- Be concise and helpful
-- Use the retrieved context when relevant
-- For technical issues, provide clear steps
-- Escalate appropriately when needed
-- Maintain professional tone
+- Use history for context: Reference past discussions naturally (e.g., "Building on our last chat...").
+- For summaries: Provide a warm recap (e.g., "From what we've discussed so far...").
+- Be engaging: End with questions to continue the conversation.
+- Maintain persona: Friendly, knowledgeable, and supportive.
 
 Context: {context}
 Analysis: {analysis}
 Reasoning: {reasoning}
+History Summary: {history_summary}
 """),
     MessagesPlaceholder(variable_name="messages")
 ])
 
 # Node functions
 def analyze_query(state: AgentState) -> AgentState:
-    """Analyze the user query and determine routing"""
+    """Analyze the user query and determine routing, with history summarization."""
     messages = state.get("messages", [])
     current_input = state.get("current_input", "")
     
@@ -113,11 +108,31 @@ def analyze_query(state: AgentState) -> AgentState:
             user_message = msg.content
             break
     
+    # Generate history summary for context using LLM for accuracy
+    history_summary = ""
+    if len(messages) > 1:  # More than just the current message
+        past_messages = [msg.content for msg in messages[:-1] if isinstance(msg, (HumanMessage, AIMessage))]
+        if past_messages:
+            history_text = "\n".join(past_messages)
+            # Use LLM to generate a concise summary
+            summarization_prompt = ChatPromptTemplate.from_messages([
+                ("system", "You are a helpful assistant. Summarize the conversation history concisely, focusing on key points, user issues, and resolutions. Keep it under 200 words."),
+                ("human", "{history}")
+            ])
+            summarization_chain = summarization_prompt | llm
+            summary_result = summarization_chain.invoke({"history": history_text})
+            history_summary = summary_result.content
+            # If summarization explicitly requested, enhance the summary
+            if any(word in user_message.lower() for word in ['summarize', 'recall', 'what did we talk about', 'summary']):
+                history_summary = f"Conversation recap: {history_summary}"
     # Create analysis chain
     analysis_chain = analysis_prompt | llm.with_structured_output(ComprehensiveAnalysis)
     
-    # Prepare input for analysis
-    analysis_input = {"messages": [HumanMessage(content=user_message)]}
+    # Prepare input for analysis, including history
+    analysis_input = {
+        "messages": [HumanMessage(content=user_message)],
+        "history_summary": history_summary
+    }
     analysis_result = analysis_chain.invoke(analysis_input)
     
     # Determine next step based on analysis
@@ -127,7 +142,8 @@ def analyze_query(state: AgentState) -> AgentState:
         "analysis": analysis_result,
         "next_step": next_step,
         "current_step": 1,
-        "reasoning_steps": [f"Analysis complete: {analysis_result.intent.value}, complexity: {analysis_result.complexity.value}"]
+        "reasoning_steps": [f"Analysis complete: {analysis_result.intent.value}, complexity: {analysis_result.complexity.value}"],
+        "history_summary": history_summary  # Pass to other nodes
     }
 
 def determine_next_step(analysis: ComprehensiveAnalysis, user_input: str) -> str:
@@ -152,25 +168,27 @@ def determine_next_step(analysis: ComprehensiveAnalysis, user_input: str) -> str
     return "retrieve"
 
 def reason_and_plan(state: AgentState) -> Dict[str, Any]:
-    """Reason about the analysis and plan next steps"""
+    """Reason about the analysis and plan next steps, using history."""
     analysis = state.get("analysis")
     current_input = state.get("current_input", "")
+    history_summary = state.get("history_summary", "")
     
     if not analysis:
         raise ValueError("No analysis available for reasoning")
     
-    reasoning_chain = reasoning_prompt | llm
+    reasoning_chain = reasoning_prompt | llm.with_structured_output(Reasoning)
     reasoning_input = {
         "analysis": analysis.model_dump_json(),
-        "current_input": current_input
+        "current_input": current_input,
+        "history_summary": history_summary
     }
     
     reasoning_result = reasoning_chain.invoke(reasoning_input)
     reasoning_steps = state.get("reasoning_steps", [])
-    reasoning_steps.append(f"Reasoning: {reasoning_result.content}")
+    reasoning_steps.append(f"Reasoning: {reasoning_result.reasoning}")
     
-    # Update next step based on reasoning
-    next_step = state.get("next_step", "retrieve")
+    # Use structured next_step
+    next_step = reasoning_result.next_step
     if analysis.requires_human_escalation:
         next_step = "escalate"
     
@@ -207,34 +225,44 @@ def retrieve_knowledge(state: AgentState) -> AgentState:
     }
 
 def generate_response(state: AgentState) -> AgentState:
-    """Generate final response based on analysis and context"""
+    """Generate final response based on analysis and context, with persona and history."""
     analysis = state.get("analysis")
     messages = state.get("messages", [])
     kb_results = state.get("knowledge_base_results", "")
     reasoning_steps = state.get("reasoning_steps", [])
+    history_summary = state.get("history_summary", "")
     
     if not analysis:
         raise ValueError("No analysis available for response generation")
     
-    # For simple greetings, use the greeting tool for consistent responses
+    # Set conversation_summary from history if available
+    if history_summary:
+        analysis.conversation_summary = history_summary
+    
+    # For simple greetings, use the greeting tool
     if analysis.intent == IntentType.greeting or analysis.complexity == QueryComplexity.simple:
         try:
             greeting_response = greeting_response_tool.invoke({"user_message": state.get("current_input", "")})
             analysis.response = greeting_response
         except Exception as e:
             logger.warning(f"Greeting tool failed, using default: {e}")
-            analysis.response = "Hello! How can I assist you today?"
+            analysis.response = "Hello! I'm eeV Assistant, here to help with all your questions. What can I assist you with today?"
     else:
         # Prepare context for response generation
         context = f"Knowledge Base: {kb_results}" if kb_results else "No additional context available."
-        reasoning = "\n".join(reasoning_steps[-3:])  # Last 3 reasoning steps
         
+        # Include history in context
+        if history_summary:
+            context += f"\nConversation History: {history_summary}"
+        
+        # Enhanced response generation with persona
         response_chain = response_prompt | llm
         response_input = {
             "context": context,
             "analysis": analysis.json(),
-            "reasoning": reasoning,
-            "messages": messages
+            "reasoning": "\n".join(reasoning_steps[-3:]),  # Last 3 reasoning steps
+            "messages": messages,
+            "history_summary": history_summary
         }
         
         response_result = response_chain.invoke(response_input)

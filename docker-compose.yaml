@@ -3,7 +3,7 @@ services:
     build:
       context: .
       args:
-        - pinecone_api=${pinecone_api}
+        - PINECONE_API_KEY=${PINECONE_API_KEY}
         - OPENAI_API_KEY=${OPENAI_API_KEY}
         - tier_1_auth_key=${tier_1_auth_key}
         - GEMINI_API_KEY=${GEMINI_API_KEY}

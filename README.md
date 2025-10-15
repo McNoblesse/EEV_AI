@@ -72,7 +72,7 @@ eeV-AI is a conversational AI application built with FastAPI and LangChain. It p
     -   Rename the `.env.example` file to `.env`.
     -   Open the `.env` file and add your actual API keys and secrets:
         ```
-        pinecone_api="your_pinecone_api_key"
+        PINECONE_API_KEY="your_pinecone_api_key"
         OPENAI_API_KEY="your_openai_api_key"
         tier_1_auth_key="your_tier_1_auth_key" # Can be any secret string for local testing
         GEMINI_API_KEY="your_gemini_api_key"

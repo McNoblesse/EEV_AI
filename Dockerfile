@@ -5,7 +5,7 @@ FROM python:3.11-slim
 WORKDIR /app
 
 # Declare build-time arguments for all your secrets
-ARG pinecone_api
+ARG PINECONE_API_KEY
 ARG OPENAI_API_KEY
 ARG tier_1_auth_key
 ARG GEMINI_API_KEY
@@ -27,9 +27,9 @@ ARG REDIS_USERNAME
 ARG POSTGRES_MEMORY_URL
 
 # Set environment variables inside the container from the build-time arguments
-ENV pinecone_api=$pinecone_api
+ENV PINECONE_API_KEY=$PINECONE_API_KEY
 ENV OPENAI_API_KEY=$OPENAI_API_KEY
-ENV tier_1_auth_key=$tier_1_auth_key
+ENV TIER_1_AUTH_KEY=$TIER_1_AUTH_KEY
 ENV GEMINI_API_KEY=$GEMINI_API_KEY
 ENV POSTGRES_URL=$POSTGRES_URL
 ENV SQLITE_DB_PATH=$SQLITE_DB_PATH

@@ -1,9 +1,10 @@
-from sqlalchemy import Column, Integer, String, Text, DateTime, Boolean, func, Enum, CheckConstraint, Float, JSON
-from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy import Column, Integer, String, Text, DateTime, Boolean, func, Enum, Float, JSON, ForeignKey
+from sqlalchemy.orm import relationship
+from sqlalchemy.dialects.postgresql import JSONB
 from config.database import Base
 import enum
-from typing import Dict, Any, List
 
+# Enums
 class IntentEnum(enum.Enum):
     greeting = "greeting"
     technical_question = "technical_question"
@@ -32,74 +33,148 @@ class ChannelEnum(enum.Enum):
     whatsapp = "whatsapp"
     social = "social"
 
+
 class Conversation(Base):
+    """
+    Core conversation data - ALL columns used in the codebase
+    This version includes all fields until full migration to split tables
+    """
     __tablename__ = "conversations"
 
-    # Core fields (existing)
+    # Core fields
     id = Column(Integer, primary_key=True, index=True)
     session_id = Column(String, index=True, nullable=False)
     user_query = Column(Text, nullable=False)
     bot_response = Column(Text, nullable=True)
     
-    # Existing analysis fields
-    intent = Column(Enum(IntentEnum), nullable=True)
-    sentiment = Column(Enum(SentimentEnum), nullable=True)
-    complexity_score = Column(Integer, nullable=True)
-    
-    # Existing timestamps
-    timestamp = Column(DateTime(timezone=True), server_default=func.now(), index=True)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
-
-    # Existing channel fields
-    channel = Column(Enum(ChannelEnum), nullable=True)
-    
-    # NEW fields (nullable=True for migration)
+    # Classification
+    intent = Column(String, nullable=True)  # Changed from Enum to String for flexibility
     intent_confidence = Column(Float, nullable=True)
     sub_intent = Column(String, nullable=True)
+    sentiment = Column(String, nullable=True)  # Changed from Enum to String
+    sentiment_score = Column(Float, nullable=True, default=0.0)
+    complexity_score = Column(Integer, nullable=True)
     
-    sentiment_score = Column(Float, nullable=True)
+    # Channel & Escalation
+    channel = Column(String, nullable=True)  # Changed from Enum to String
+    requires_escalation = Column(Boolean, default=False)
     
-    complexity = Column(Enum(ComplexityEnum), nullable=True)
-    complexity_factors = Column(JSON, nullable=True)
-    
-    entities = Column(JSON, nullable=True)
-    keywords = Column(JSON, nullable=True)
+    # User info
     user_type = Column(String, nullable=True)
     
-    # Voice-specific fields (nullable for migration)
+    # Conversation state
+    conversation_summary = Column(Text, nullable=True)
+    conversation_ended = Column(Boolean, default=False)
+    
+    # Analysis data (will be moved to conversation_analytics table eventually)
+    entities = Column(JSONB, nullable=True)
+    keywords = Column(JSONB, nullable=True)
+    complexity_factors = Column(JSONB, nullable=True)
+    
+    # Reasoning trace (will be moved to conversation_analytics table eventually)
+    reasoning_steps = Column(JSONB, nullable=True)
+    tool_calls_used = Column(JSONB, nullable=True)
+    retrieval_context = Column(JSONB, nullable=True)
+    
+    # Performance metrics (will be moved to conversation_analytics table eventually)
+    processing_time_ms = Column(Integer, nullable=True)
+    tokens_used = Column(Integer, nullable=True)
+    model_used = Column(String, nullable=True)
+    
+    # Voice-specific fields (will be moved to voice_metadata table eventually)
     transcription_model = Column(String, nullable=True)
     tts_model = Column(String, nullable=True)
     voice_used = Column(String, nullable=True)
     audio_file_path = Column(String, nullable=True)
+    audio_duration_seconds = Column(Float, nullable=True)
+    transcription_confidence = Column(Float, nullable=True)
+    
+    # Timestamps
+    timestamp = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    
+    # Relationships (for future use with split tables)
+    analytics = relationship(
+        "ConversationAnalytics", 
+        back_populates="conversation", 
+        cascade="all, delete-orphan",
+        uselist=False
+    )
+    voice_metadata = relationship(
+        "VoiceMetadata", 
+        back_populates="conversation", 
+        cascade="all, delete-orphan",
+        uselist=False
+    )
 
-    # Enhanced conversation management (nullable for migration)
-    requires_knowledge_base = Column(Boolean, default=False, nullable=True)
-    requires_human_escalation = Column(Boolean, default=False, nullable=True)
-    can_respond_directly = Column(Boolean, default=False, nullable=True)
+
+class ConversationAnalytics(Base):
+    """
+    Separate analytics table for debug/analysis data
+    Use this for new conversations instead of putting data in main table
+    """
+    __tablename__ = "conversation_analytics"
     
-    conversation_summary = Column(Text, nullable=True)
-    conversation_ended = Column(Boolean, default=False, nullable=True)
-    end_reason = Column(String, nullable=True)
+    id = Column(Integer, primary_key=True)
+    conversation_id = Column(
+        Integer, 
+        ForeignKey('conversations.id', ondelete='CASCADE'), 
+        nullable=False, 
+        unique=True,
+        index=True
+    )
     
-    follow_up_required = Column(Boolean, default=False, nullable=True)
-    follow_up_details = Column(Text, nullable=True)
+    # Extracted data
+    entities = Column(JSONB, nullable=True)
+    keywords = Column(JSONB, nullable=True)
+    complexity_factors = Column(JSONB, nullable=True)
     
-    # Analytics fields (nullable for migration)
-    reasoning_steps = Column(JSON, nullable=True)
-    tool_calls_used = Column(JSON, nullable=True)
-    retrieval_context = Column(JSON, nullable=True)
+    # Reasoning trace
+    reasoning_steps = Column(JSONB, nullable=True)
+    tool_calls_used = Column(JSONB, nullable=True)
+    retrieval_context = Column(JSONB, nullable=True)
     
+    # Performance metrics
     processing_time_ms = Column(Integer, nullable=True)
     tokens_used = Column(Integer, nullable=True)
     model_used = Column(String, nullable=True)
+    
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    
+    # Relationship
+    conversation = relationship("Conversation", back_populates="analytics")
 
-    # Constraints (updated to handle nullable fields during migration)
-    __table_args__ = (
-        CheckConstraint('complexity_score >= 1 AND complexity_score <= 10', name='complexity_range'),
+
+class VoiceMetadata(Base):
+    """
+    Separate table for voice-specific metadata
+    Use this for voice conversations instead of main table
+    """
+    __tablename__ = "voice_metadata"
+    
+    id = Column(Integer, primary_key=True)
+    conversation_id = Column(
+        Integer, 
+        ForeignKey('conversations.id', ondelete='CASCADE'), 
+        nullable=False, 
+        unique=True,
+        index=True
     )
+    
+    transcription_model = Column(String, nullable=True)
+    tts_model = Column(String, nullable=True)
+    voice_used = Column(String, nullable=True)
+    audio_file_path = Column(String, nullable=True)
+    audio_duration_seconds = Column(Float, nullable=True)
+    transcription_confidence = Column(Float, nullable=True)
+    
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    
+    # Relationship
+    conversation = relationship("Conversation", back_populates="voice_metadata")
 
-# NEW tables (will be created, won't affect existing data)
+
+# Keep other existing tables (AgentSession, KnowledgeBaseUsage, etc.)
 class AgentSession(Base):
     __tablename__ = "agent_sessions"
     
@@ -108,12 +183,12 @@ class AgentSession(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     last_activity = Column(DateTime(timezone=True), onupdate=func.now())
     
-    channel = Column(Enum(ChannelEnum), nullable=False)
+    channel = Column(String, nullable=False)
     user_id = Column(String, nullable=True)
     device_info = Column(JSON, nullable=True)
     
-    current_intent = Column(Enum(IntentEnum), nullable=True)
-    current_complexity = Column(Enum(ComplexityEnum), nullable=True)
+    current_intent = Column(String, nullable=True)
+    current_complexity = Column(String, nullable=True)
     conversation_turn_count = Column(Integer, default=0)
     
     total_tokens_used = Column(Integer, default=0)
@@ -123,46 +198,24 @@ class AgentSession(Base):
     is_active = Column(Boolean, default=True)
     requires_follow_up = Column(Boolean, default=False)
     satisfaction_score = Column(Integer, nullable=True)
-    
-    langgraph_thread_id = Column(String, nullable=True)
-    checkpoint_data = Column(JSON, nullable=True)
 
-class KnowledgeBaseUsage(Base):
-    __tablename__ = "knowledge_base_usage"
+
+class DocumentUpload(Base):
+    __tablename__ = "document_uploads"
     
     id = Column(Integer, primary_key=True, index=True)
-    session_id = Column(String, index=True, nullable=False)
-    timestamp = Column(DateTime(timezone=True), server_default=func.now())
+    filename = Column(String, nullable=False)
+    file_type = Column(String, nullable=False)
+    category = Column(String, nullable=False, index=True)
     
-    query_text = Column(Text, nullable=False)
-    search_terms = Column(JSON, nullable=True)
-    results_count = Column(Integer, nullable=True)
+    status = Column(String, default="processing", index=True)
+    upload_date = Column(DateTime(timezone=True), server_default=func.now())
     
-    retrieval_success = Column(Boolean, default=True)
-    response_relevance = Column(Integer, nullable=True)
-    tools_used = Column(JSON, nullable=True)
+    file_size_bytes = Column(Integer, nullable=True)
+    chunk_count = Column(Integer, default=0)
     
-    retrieval_time_ms = Column(Integer, nullable=True)
-    source_documents = Column(JSON, nullable=True)
-
-class EscalationLog(Base):
-    __tablename__ = "escalation_logs"
+    uploaded_by = Column(String, nullable=True)
+    error_message = Column(Text, nullable=True)
     
-    id = Column(Integer, primary_key=True, index=True)
-    session_id = Column(String, index=True, nullable=False)
-    ticket_id = Column(Integer, nullable=True)
-    timestamp = Column(DateTime(timezone=True), server_default=func.now())
-    
-    escalation_reason = Column(Text, nullable=False)
-    original_query = Column(Text, nullable=False)
-    analysis_summary = Column(JSON, nullable=True)
-    
-    assigned_agent = Column(String, nullable=True)
-    resolution_time = Column(DateTime(timezone=True), nullable=True)
-    resolution_notes = Column(Text, nullable=True)
-    
-    status = Column(String, default="pending")
-    priority = Column(Integer, default=1)
-    
-    customer_satisfaction = Column(Integer, nullable=True)
-    agent_feedback = Column(Text, nullable=True)
+    deleted_at = Column(DateTime(timezone=True), nullable=True)
+    is_deleted = Column(Boolean, default=False, index=True)

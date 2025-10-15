@@ -20,7 +20,7 @@ os.environ["GOOGLE_API_KEY"] = accessKeys.GEMINI_API_KEY
 # Initialize embeddings and vector store
 embed_model = GoogleGenerativeAIEmbeddings(model="models/text-embedding-004")
 
-pc = Pinecone(api_key=accessKeys.pinecone_api)
+pc = Pinecone(api_key=accessKeys.PINECONE_API_KEY)
 spec = ServerlessSpec(cloud="aws", region="us-east-1")
 index_name = 'eev-ai-unstructured-data'
 index = pc.Index(index_name)

@@ -105,39 +105,40 @@ def tier_3_model_handler(
 
         processing_time_ms = int((time.time() - start_time) * 1000)  # Calculate processing time
 
-        # Save to database with all new fields
-        new_conversation_turn = Conversation(
+        # Save to conversations table (core data only)
+        new_conversation = Conversation(
             session_id=data.session_id,
             user_query=data.user_query,
             bot_response=final_response,
             intent=analysis_result.intent.value,
+            intent_confidence=analysis_result.intent_confidence,
             sentiment=analysis_result.sentiment,
             complexity_score=analysis_result.complexity_score,
             channel=getattr(data, 'channel', 'chat'),
-            intent_confidence=analysis_result.intent_confidence,
-            sub_intent=analysis_result.sub_intent,
-            sentiment_score=analysis_result.sentiment_score,
-            complexity=analysis_result.complexity.value if analysis_result.complexity else None,
-            complexity_factors=analysis_result.complexity_factors,
+            requires_escalation=analysis_result.requires_human_escalation
+        )
+        db.add(new_conversation)
+        db.commit()
+        db.refresh(new_conversation)
+        
+        # Save analytics data (separate table)
+        from model.database_models import ConversationAnalytics
+        
+        analytics = ConversationAnalytics(
+            conversation_id=new_conversation.id,
             entities=[entity.dict() for entity in analysis_result.entities],
             keywords=analysis_result.keywords,
-            user_type=analysis_result.user_type,
-            requires_human_escalation=analysis_result.requires_human_escalation,
-            can_respond_directly=analysis_result.can_respond_directly,
-            conversation_summary=analysis_result.conversation_summary,
-            conversation_ended=analysis_result.conversation_ended,
+            complexity_factors=analysis_result.complexity_factors,
             reasoning_steps=final_agent_state.get("reasoning_steps", []),
             tool_calls_used=final_agent_state.get("current_tool_calls", []),
             retrieval_context=final_agent_state.get("retrieved_context", []),
             processing_time_ms=processing_time_ms,
             tokens_used=final_agent_state.get("tokens_used", 0),
-            model_used=final_agent_state.get("model_used", "gpt-4")
+            model_used="gpt-4o-mini"
         )
-        
-        db.add(new_conversation_turn)
+        db.add(analytics)
         db.commit()
-        db.refresh(new_conversation_turn)
-
+        
         # Prepare response
         return PayloadResponse(
             session_id=data.session_id,
