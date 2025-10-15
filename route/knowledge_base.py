@@ -3,23 +3,31 @@ Knowledge Base Management API
 Handles document upload, processing, indexing, and management
 """
 
-from fastapi import APIRouter, UploadFile, File, Form, Depends, HTTPException, Query, BackgroundTasks
+import os
+import uuid
+import shutil
+from pathlib import Path
+from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException, BackgroundTasks, Query
 from sqlalchemy.orm import Session
 from typing import List, Optional
-import logging
-import uuid
 from datetime import datetime
-import os
+import logging
 
+from security.authentication import AuthenticateTier1Model, get_client_context
 from config.database import get_db
-from security.authentication import AuthenticateTier1Model
 from model.database_models import DocumentUpload
 from utils.document_processor import document_processor
-from utils.tools import vectorstore, embed_model
 
+router = APIRouter(prefix="/knowledge-base", tags=["Knowledge Base"])
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/v1/knowledge-base", tags=["Knowledge Base"])
+# Create uploads directory
+UPLOAD_DIR = Path("uploads")
+UPLOAD_DIR.mkdir(exist_ok=True)
+
+# File size limits
+MAX_FILE_SIZE = 200 * 1024 * 1024  # 200MB
+MAX_FILES_PER_REQUEST = 5
 
 
 @router.post("/upload")
@@ -27,176 +35,180 @@ async def upload_documents(
     background_tasks: BackgroundTasks,
     files: List[UploadFile] = File(...),
     category: str = Form(...),
-    enable_ocr: bool = Form(True),
-    api_key: str = Depends(AuthenticateTier1Model),
+    enable_ocr: bool = Form(False),
+    client: dict = Depends(get_client_context),  # ✅ INJECT CLIENT CONTEXT
     db: Session = Depends(get_db)
 ):
     """
-    Upload and process documents for knowledge base
+    Upload documents to client-specific knowledge base
     
-    **Limits**:
-    - Maximum 5 files per request
-    - Combined size limit: 200MB
-    - Individual file limit: 50MB
+    **Client Isolation**: Documents are stored in client-specific Pinecone namespace
     """
     
+    client_id = client["client_id"]
+    namespace_prefix = client["namespace_prefix"]
+    
+    logger.info(f"📁 Upload request from client: {client['client_name']} ({client_id})")
+    
     # Validate file count
-    if len(files) > 5:
+    if len(files) > MAX_FILES_PER_REQUEST:
         raise HTTPException(
             status_code=400,
-            detail="Maximum 5 files allowed per upload. Please split your upload into multiple requests."
+            detail=f"Maximum {MAX_FILES_PER_REQUEST} files allowed per request"
         )
     
-    # Calculate total size
+    # Validate total size
     total_size = 0
     for file in files:
-        content = await file.read()
-        total_size += len(content)
-        await file.seek(0)  # Reset for processing
+        # Read file size
+        file.file.seek(0, 2)  # Seek to end
+        file_size = file.file.tell()
+        file.file.seek(0)  # Reset to start
+        total_size += file_size
     
-    # Validate total size (200MB = 209,715,200 bytes)
-    if total_size > 200 * 1024 * 1024:
+    if total_size > MAX_FILE_SIZE:
         raise HTTPException(
             status_code=400,
-            detail=f"Total upload size ({total_size / 1024 / 1024:.1f}MB) exceeds 200MB limit"
+            detail=f"Total file size exceeds {MAX_FILE_SIZE / 1024 / 1024}MB limit"
         )
     
-    if not category or not category.strip():
-        raise HTTPException(status_code=400, detail="Category is required")
-    
-    results = []
+    # Process each file
+    uploaded_docs = []
     
     for file in files:
         try:
-            # Validate file size (50MB limit)
-            file_content = await file.read()
-            file_size = len(file_content)
+            # Generate unique filename
+            file_ext = Path(file.filename).suffix.lower()
+            unique_filename = f"{uuid.uuid4()}{file_ext}"
+            temp_file_path = UPLOAD_DIR / unique_filename
             
-            if file_size > 50 * 1024 * 1024:
-                results.append({
-                    "filename": file.filename,
-                    "status": "failed",
-                    "error": "File size exceeds 50MB limit"
-                })
+            # Validate file type
+            allowed_extensions = ['.pdf', '.docx', '.txt', '.csv', '.doc']
+            if file_ext not in allowed_extensions:
+                logger.warning(f"Unsupported file type: {file.filename}")
                 continue
             
-            # Reset file pointer
-            await file.seek(0)
+            # Get file size
+            file.file.seek(0, 2)
+            file_size = file.file.tell()
+            file.file.seek(0)
             
-            # Generate unique filename
-            file_extension = os.path.splitext(file.filename)[1].lower()
-            unique_filename = f"{uuid.uuid4()}{file_extension}"
+            # Save file to disk first (THIS IS THE FIX)
+            with open(temp_file_path, "wb") as buffer:
+                shutil.copyfileobj(file.file, buffer)
+            
+            logger.info(f"Saved file to: {temp_file_path}")
             
             # Create database record
             doc_record = DocumentUpload(
+                client_id=client_id,  # ✅ NEW
+                client_name=client["client_name"],  # ✅ NEW
                 filename=unique_filename,
                 original_filename=file.filename,
-                category=category.strip(),
-                file_type=file_extension,
+                category=category,
+                file_type=file_ext,
                 file_size_bytes=file_size,
                 status="pending",
-                uploaded_by=api_key[:10] if api_key else "anonymous"
+                uploaded_by=client_id,  # ✅ CHANGED
+                processing_started_at=datetime.utcnow()
             )
             
             db.add(doc_record)
             db.commit()
             db.refresh(doc_record)
             
-            # Process document in background
+            # ✅ PASS CLIENT CONTEXT TO BACKGROUND TASK
             background_tasks.add_task(
                 process_document_background,
                 doc_id=doc_record.id,
-                file=file,
+                file_path=str(temp_file_path),
+                original_filename=file.filename,
                 category=category,
-                enable_ocr=enable_ocr
+                enable_ocr=enable_ocr,
+                client_id=client_id,  # ✅ NEW
+                namespace_prefix=namespace_prefix  # ✅ NEW
             )
             
-            results.append({
+            uploaded_docs.append({
                 "id": doc_record.id,
                 "filename": file.filename,
-                "status": "processing",
-                "message": "Document uploaded and queued for processing"
+                "client_id": client_id,  # ✅ EXPOSE IN RESPONSE
+                "status": "processing"
             })
             
+            logger.info(f"Queued for processing: {file.filename} (ID: {doc_record.id})")
+            
         except Exception as e:
-            logger.error(f"Error uploading {file.filename}: {str(e)}")
-            results.append({
-                "filename": file.filename,
-                "status": "failed",
-                "error": str(e)
-            })
+            logger.error(f"Error uploading {file.filename}: {str(e)}", exc_info=True)
+            continue
+    
+    if not uploaded_docs:
+        raise HTTPException(
+            status_code=400,
+            detail="No valid files were uploaded"
+        )
     
     return {
-        "uploaded_documents": results,
-        "total_files": len(files),
-        "successful": len([r for r in results if r["status"] == "processing"]),
-        "failed": len([r for r in results if r["status"] == "failed"])
+        "message": f"Successfully queued {len(uploaded_docs)} document(s) for client {client['client_name']}",
+        "client_id": client_id,
+        "documents": uploaded_docs
     }
 
 
 async def process_document_background(
     doc_id: int,
-    file: UploadFile,
+    file_path: str,
+    original_filename: str,
     category: str,
-    enable_ocr: bool
+    enable_ocr: bool,
+    client_id: str,  # ✅ NEW
+    namespace_prefix: str  # ✅ NEW
 ):
     """
-    Background task to process uploaded document
+    Process document with client-specific namespace isolation
     """
     from config.database import SessionLocal
     db = SessionLocal()
     
     try:
-        # Get document record
         doc_record = db.query(DocumentUpload).filter(DocumentUpload.id == doc_id).first()
         if not doc_record:
-            logger.error(f"Document record {doc_id} not found")
+            logger.error(f"Document {doc_id} not found")
             return
         
-        # Update status
         doc_record.status = "processing"
-        doc_record.processing_started_at = datetime.utcnow()
         db.commit()
         
         start_time = datetime.utcnow()
+        logger.info(f"Processing document {doc_id} for client {client_id}: {original_filename}")
         
         # Process document
         result = await document_processor.process_document(
-            file=file,
+            file_path=file_path,
+            filename=original_filename,
             category=category,
             enable_ocr=enable_ocr
         )
         
-        # Store chunks in Pinecone
-        vector_ids = []
-        namespace = f"kb_{category.lower().replace(' ', '_')}"
+        # ✅ CREATE CLIENT-SPECIFIC NAMESPACE
+        namespace = f"{namespace_prefix}_{category.lower().replace(' ', '_')}"
         
-        for i, chunk in enumerate(result["chunks"]):
-            # Create metadata for each chunk
-            metadata = {
-                "source": doc_record.original_filename,
+        logger.info(f"📦 Storing in namespace: {namespace}")
+        
+        # ✅ STORE IN CLIENT-SPECIFIC PINECONE NAMESPACE
+        vector_ids = await document_processor.store_in_vectordb(
+            chunks=result["chunks"],
+            metadata={
+                "filename": original_filename,
                 "category": category,
-                "chunk_index": i,
-                "total_chunks": result["chunk_count"],
-                "upload_date": doc_record.upload_date.isoformat(),
-                "document_id": doc_id,
-                "file_type": result["file_type"],
-                **result["metadata"]
-            }
-            
-            # Add to vector store
-            try:
-                ids = vectorstore.add_texts(
-                    texts=[chunk],
-                    metadatas=[metadata],
-                    namespace=namespace
-                )
-                if ids:
-                    vector_ids.extend(ids)
-            except Exception as e:
-                logger.error(f"Failed to add chunk {i} to vector store: {str(e)}")
+                "doc_id": doc_id,
+                "client_id": client_id,  # ✅ ADD CLIENT ID TO METADATA
+                "client_name": doc_record.client_name
+            },
+            namespace=namespace  # ✅ ISOLATED NAMESPACE
+        )
         
-        # Update document record
+        # Update record
         processing_time = (datetime.utcnow() - start_time).total_seconds() * 1000
         
         doc_record.status = "indexed"
@@ -204,28 +216,24 @@ async def process_document_background(
         doc_record.total_tokens = document_processor.estimate_tokens(result["text"])
         doc_record.text_preview = result["preview"]
         doc_record.vector_ids = vector_ids
-        doc_record.namespace = namespace
+        doc_record.namespace = namespace  # ✅ SAVE NAMESPACE
         doc_record.processing_completed_at = datetime.utcnow()
         doc_record.processing_time_ms = int(processing_time)
         doc_record.required_ocr = result["metadata"].get("ocr_used", False)
         doc_record.ocr_confidence = result["metadata"].get("ocr_confidence")
-        doc_record.metadata = result["metadata"]
+        doc_record.doc_metadata = result["metadata"]
         
         db.commit()
         
-        logger.info(
-            f"Successfully processed document {doc_id}: "
-            f"{result['chunk_count']} chunks, {processing_time:.0f}ms"
-        )
+        logger.info(f"✅ Successfully processed {original_filename} for {client_id}: {result['chunk_count']} chunks in namespace {namespace}")
         
     except Exception as e:
-        logger.error(f"Error processing document {doc_id}: {str(e)}")
+        logger.error(f"Error processing document {doc_id}: {str(e)}", exc_info=True)
         
-        # Update status to failed
+        doc_record = db.query(DocumentUpload).filter(DocumentUpload.id == doc_id).first()
         if doc_record:
             doc_record.status = "failed"
             doc_record.error_message = str(e)
-            doc_record.processing_completed_at = datetime.utcnow()
             db.commit()
     
     finally:
@@ -242,13 +250,13 @@ async def list_documents(
     db: Session = Depends(get_db)
 ):
     """
-    List uploaded documents with optional filtering
+    List all uploaded documents with optional filters
     
     Args:
-        category: Filter by document category
-        status: Filter by processing status (pending, processing, indexed, failed)
-        skip: Number of records to skip (pagination)
-        limit: Maximum number of records to return
+        category: Filter by category
+        status: Filter by status (pending/processing/indexed/failed)
+        skip: Number of records to skip
+        limit: Maximum records to return
         
     Returns:
         List of documents with metadata
@@ -261,10 +269,7 @@ async def list_documents(
     if status:
         query = query.filter(DocumentUpload.status == status)
     
-    # Get total count
     total = query.count()
-    
-    # Apply pagination
     documents = query.order_by(DocumentUpload.upload_date.desc()).offset(skip).limit(limit).all()
     
     return {
@@ -279,11 +284,9 @@ async def list_documents(
                 "file_type": doc.file_type,
                 "file_size_bytes": doc.file_size_bytes,
                 "status": doc.status,
-                "chunk_count": doc.chunk_count,
                 "upload_date": doc.upload_date.isoformat() if doc.upload_date else None,
+                "chunk_count": doc.chunk_count,
                 "processing_time_ms": doc.processing_time_ms,
-                "required_ocr": doc.required_ocr,
-                "text_preview": doc.text_preview,
                 "error_message": doc.error_message
             }
             for doc in documents
@@ -297,15 +300,7 @@ async def get_document(
     api_key: str = Depends(AuthenticateTier1Model),
     db: Session = Depends(get_db)
 ):
-    """
-    Get detailed information about a specific document
-    
-    Args:
-        document_id: Document ID
-        
-    Returns:
-        Document details including metadata
-    """
+    """Get detailed information about a specific document"""
     document = db.query(DocumentUpload).filter(
         DocumentUpload.id == document_id,
         DocumentUpload.is_deleted == False
@@ -332,7 +327,7 @@ async def get_document(
         "processing_time_ms": document.processing_time_ms,
         "required_ocr": document.required_ocr,
         "ocr_confidence": document.ocr_confidence,
-        "metadata": document.metadata,
+        "metadata": document.doc_metadata,  # ✅ Return as "metadata" in JSON
         "error_message": document.error_message
     }
 
@@ -344,15 +339,13 @@ async def delete_document(
     db: Session = Depends(get_db)
 ):
     """
-    Delete a document from the knowledge base
-    
-    Performs soft delete and removes vectors from Pinecone
+    Soft delete a document (marks as deleted, doesn't remove from DB)
     
     Args:
         document_id: Document ID to delete
         
     Returns:
-        Deletion confirmation
+        Success message
     """
     document = db.query(DocumentUpload).filter(
         DocumentUpload.id == document_id,
@@ -362,121 +355,18 @@ async def delete_document(
     if not document:
         raise HTTPException(status_code=404, detail="Document not found")
     
-    try:
-        # Delete vectors from Pinecone
-        if document.vector_ids and document.namespace:
-            try:
-                from pinecone import Pinecone
-                from config.access_keys import accessKeys
-
-                pc = Pinecone(api_key=accessKeys.PINECONE_API_KEY)
-                index = pc.Index('eev-ai-unstructured-data')
-                index.delete(
-                    ids=document.vector_ids,
-                    namespace=document.namespace
-                )
-                logger.info(f"Deleted {len(document.vector_ids)} vectors from Pinecone")
-            except Exception as e:
-                logger.error(f"Failed to delete vectors from Pinecone: {str(e)}")
-                # Continue with soft delete even if Pinecone deletion fails
-        
-        # Soft delete in database
-        document.is_deleted = True
-        document.deleted_at = datetime.utcnow()
-        db.commit()
-        
-        return {
-            "message": "Document deleted successfully",
-            "document_id": document_id,
-            "filename": document.original_filename,
-            "vectors_deleted": len(document.vector_ids) if document.vector_ids else 0
-        }
-        
-    except Exception as e:
-        logger.error(f"Error deleting document {document_id}: {str(e)}")
-        db.rollback()
-        raise HTTPException(status_code=500, detail=f"Failed to delete document: {str(e)}")
-
-
-@router.get("/categories")
-async def list_categories(
-    api_key: str = Depends(AuthenticateTier1Model),
-    db: Session = Depends(get_db)
-):
-    """
-    Get list of all document categories
+    # Soft delete
+    document.is_deleted = True
+    document.deleted_at = datetime.utcnow()
+    db.commit()
     
-    Returns:
-        List of unique categories with document counts
-    """
-    from sqlalchemy import func
+    # TODO: Also delete from Pinecone vector store
+    # if document.vector_ids:
+    #     await document_processor.delete_from_vectordb(document.vector_ids)
     
-    categories = db.query(
-        DocumentUpload.category,
-        func.count(DocumentUpload.id).label('count')
-    ).filter(
-        DocumentUpload.is_deleted == False
-    ).group_by(
-        DocumentUpload.category
-    ).all()
+    logger.info(f"Deleted document {document_id}: {document.original_filename}")
     
     return {
-        "categories": [
-            {
-                "name": cat.category,
-                "document_count": cat.count
-            }
-            for cat in categories
-        ]
+        "message": f"Document {document.original_filename} deleted successfully",
+        "document_id": document_id
     }
-
-
-@router.get("/stats")
-async def get_stats(
-    api_key: str = Depends(AuthenticateTier1Model),
-    db: Session = Depends(get_db)
-):
-    """
-    Get knowledge base statistics
-    
-    Returns:
-        Overall statistics about the knowledge base
-    """
-    from sqlalchemy import func
-    
-    stats = {
-        "total_documents": db.query(DocumentUpload).filter(
-            DocumentUpload.is_deleted == False
-        ).count(),
-        "by_status": {},
-        "by_file_type": {},
-        "total_chunks": db.query(func.sum(DocumentUpload.chunk_count)).filter(
-            DocumentUpload.is_deleted == False,
-            DocumentUpload.status == "indexed"
-        ).scalar() or 0,
-        "total_size_bytes": db.query(func.sum(DocumentUpload.file_size_bytes)).filter(
-            DocumentUpload.is_deleted == False
-        ).scalar() or 0
-    }
-    
-    # Status breakdown
-    status_counts = db.query(
-        DocumentUpload.status,
-        func.count(DocumentUpload.id)
-    ).filter(
-        DocumentUpload.is_deleted == False
-    ).group_by(DocumentUpload.status).all()
-    
-    stats["by_status"] = {status: count for status, count in status_counts}
-    
-    # File type breakdown
-    type_counts = db.query(
-        DocumentUpload.file_type,
-        func.count(DocumentUpload.id)
-    ).filter(
-        DocumentUpload.is_deleted == False
-    ).group_by(DocumentUpload.file_type).all()
-    
-    stats["by_file_type"] = {file_type: count for file_type, count in type_counts}
-    
-    return stats

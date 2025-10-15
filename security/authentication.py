@@ -10,13 +10,17 @@ from collections import defaultdict
 import re
 import os
 from dotenv import load_dotenv
+from fastapi import Security
+from sqlalchemy.orm import Session
+from model.database_models import Client
+from config.database import SessionLocal
 
 load_dotenv()
 
 logger = logging.getLogger(__name__)
 
 # API Key header
-api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
+api_key_header = APIKeyHeader(name="tier_1_key_auth", auto_error=False)
 
 # Tier-based API keys (store securely in production)
 # Load API keys from .env
@@ -47,8 +51,26 @@ def authenticate_api_key(api_key: Optional[str], min_tier: int = 1) -> str:
     logger.info(f"Authenticated: {key_info['name']} (Tier {key_info['tier']})")
     return api_key
 
-async def AuthenticateTier1Model(api_key: Optional[str] = Depends(api_key_header)):
-    return authenticate_api_key(api_key, min_tier=1)
+async def AuthenticateTier1Model(tier_1_key_auth: str = Security(api_key_header)):
+    """
+    Authenticate and return API key with client context
+    """
+    if not tier_1_key_auth:
+        raise HTTPException(status_code=401, detail="Missing API key")
+    
+    # Validate API key (existing logic)
+    from config.access_keys import accessKeys
+    
+    valid_keys = [
+        accessKeys.TIER1_API_KEY,
+        accessKeys.TIER2_API_KEY,
+        accessKeys.TIER3_API_KEY
+    ]
+    
+    if tier_1_key_auth not in valid_keys:
+        raise HTTPException(status_code=403, detail="Invalid API key")
+    
+    return tier_1_key_auth
 
 async def AuthenticateTier2Model(api_key: Optional[str] = Depends(api_key_header)):
     return authenticate_api_key(api_key, min_tier=2)
@@ -145,8 +167,6 @@ def log_security_event(event_type: str, details: dict, request: Request = None):
         })
     logger.warning(f"SECURITY_EVENT: {log_data}")
 
-load_dotenv()
-
 # JWT (for future use)
 JWT_SECRET = os.getenv("JWT_SECRET")  # Loaded from .env
 JWT_ALGORITHM = os.getenv("JWT_ALGORITHM")
@@ -179,3 +199,56 @@ def validate_request_params(required_params: list = None, optional_params: list 
             return await func(*args, **kwargs)
         return wrapper
     return decorator
+
+def get_client_from_api_key(api_key: str) -> Optional[dict]:
+    """
+    Extract client information from API key
+    
+    Returns:
+        dict: {client_id, client_name, namespace_prefix}
+    """
+    db = SessionLocal()
+    
+    try:
+        client = db.query(Client).filter(
+            Client.api_key == api_key,
+            Client.is_active == True
+        ).first()
+        
+        if client:
+            return {
+                "client_id": client.client_id,
+                "client_name": client.client_name,
+                "namespace_prefix": client.namespace_prefix,
+                "subscription_tier": client.subscription_tier
+            }
+        
+        # Fallback to default client for backward compatibility
+        return {
+            "client_id": "default_client",
+            "client_name": "Default Client",
+            "namespace_prefix": "client_default",
+            "subscription_tier": "basic"
+        }
+        
+    finally:
+        db.close()
+
+def get_client_context(api_key: str = Security(api_key_header)) -> dict:
+    """
+    Dependency to inject client context into endpoints
+    
+    Usage:
+        @router.post("/endpoint")
+        async def endpoint(client: dict = Depends(get_client_context)):
+            client_id = client["client_id"]
+    """
+    if not api_key:
+        raise HTTPException(status_code=401, detail="Missing API key")
+    
+    client_info = get_client_from_api_key(api_key)
+    
+    if not client_info:
+        raise HTTPException(status_code=403, detail="Invalid or inactive client")
+    
+    return client_info

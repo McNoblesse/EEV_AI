@@ -174,7 +174,6 @@ class VoiceMetadata(Base):
     conversation = relationship("Conversation", back_populates="voice_metadata")
 
 
-# Keep other existing tables (AgentSession, KnowledgeBaseUsage, etc.)
 class AgentSession(Base):
     __tablename__ = "agent_sessions"
     
@@ -201,21 +200,83 @@ class AgentSession(Base):
 
 
 class DocumentUpload(Base):
+    """Knowledge base document uploads with client isolation"""
     __tablename__ = "document_uploads"
     
+    # Primary identification
     id = Column(Integer, primary_key=True, index=True)
-    filename = Column(String, nullable=False)
-    file_type = Column(String, nullable=False)
+    
+    client_id = Column(String, nullable=False, index=True)  # NEW FIELD
+    client_name = Column(String, nullable=True)  # Optional friendly name
+    
+    filename = Column(String, nullable=False, index=True)
+    original_filename = Column(String, nullable=False)
+    
+    # Categorization
     category = Column(String, nullable=False, index=True)
+    file_type = Column(String, nullable=False)
+    file_size_bytes = Column(Integer, nullable=False)
     
-    status = Column(String, default="processing", index=True)
-    upload_date = Column(DateTime(timezone=True), server_default=func.now())
-    
-    file_size_bytes = Column(Integer, nullable=True)
-    chunk_count = Column(Integer, default=0)
-    
-    uploaded_by = Column(String, nullable=True)
+    # Status tracking
+    status = Column(String, nullable=False, default="pending", index=True)
     error_message = Column(Text, nullable=True)
     
-    deleted_at = Column(DateTime(timezone=True), nullable=True)
+    # Upload metadata
+    upload_date = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+    uploaded_by = Column(String, nullable=True)
+    
+    # Processing results
+    chunk_count = Column(Integer, nullable=True)
+    total_tokens = Column(Integer, nullable=True)
+    text_preview = Column(Text, nullable=True)
+    
+    # Vector store metadata
+    vector_ids = Column(JSON, nullable=True)
+    namespace = Column(String, nullable=True)  # Format: "client_{client_id}_{category}"
+    
+    # Processing timing
+    processing_started_at = Column(DateTime(timezone=True), nullable=True)
+    processing_completed_at = Column(DateTime(timezone=True), nullable=True)
+    processing_time_ms = Column(Integer, nullable=True)
+    
+    # OCR metadata
+    required_ocr = Column(Boolean, nullable=True)
+    ocr_confidence = Column(Float, nullable=True)
+    
+    # Additional metadata - RENAMED from 'metadata'
+    doc_metadata = Column(JSON, nullable=True)  # ✅ FIXED
+    
+    # Soft deletion
     is_deleted = Column(Boolean, default=False, index=True)
+    deleted_at = Column(DateTime(timezone=True), nullable=True)
+
+
+class Client(Base):
+    """Client/Tenant management for multi-tenancy"""
+    __tablename__ = "clients"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    client_id = Column(String, unique=True, nullable=False, index=True)  # e.g., "acme_corp"
+    client_name = Column(String, nullable=False)  # e.g., "Acme Corporation"
+    
+    # API Keys (each client has their own)
+    api_key = Column(String, unique=True, nullable=False)
+    api_key_hash = Column(String, nullable=False)  # Hashed for security
+    
+    # Pinecone namespace prefix
+    namespace_prefix = Column(String, nullable=False)  # e.g., "client_acme"
+    
+    # Subscription details
+    subscription_tier = Column(String, nullable=True)  # basic, premium, enterprise
+    max_documents = Column(Integer, nullable=True, default=1000)
+    max_storage_mb = Column(Integer, nullable=True, default=10000)  # 10GB
+    
+    # Status
+    is_active = Column(Boolean, default=True, index=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    
+    # Metadata
+    contact_email = Column(String, nullable=True)
+    company_domain = Column(String, nullable=True)
+    client_metadata = Column(JSON, nullable=True)

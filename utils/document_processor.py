@@ -16,6 +16,7 @@ import pytesseract
 from PIL import Image
 from pdf2image import convert_from_bytes
 from langchain.text_splitter import RecursiveCharacterTextSplitter
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
@@ -46,302 +47,172 @@ class DocumentProcessor:
     
     async def process_document(
         self,
-        file: UploadFile,
+        file_path: str,  # ✅ CHANGED: Accept file path
+        filename: str,
         category: str,
-        enable_ocr: Optional[bool] = None
+        enable_ocr: bool = False
     ) -> Dict[str, Any]:
         """
-        Process uploaded document and extract text
+        Process document from file path
         
         Args:
-            file: Uploaded file object
+            file_path: Path to file on disk
+            filename: Original filename
             category: Document category
-            enable_ocr: Override OCR setting for this document
+            enable_ocr: Whether to use OCR
             
         Returns:
-            Dictionary containing extracted text, chunks, and metadata
+            Dict with text, chunks, metadata
         """
+        file_ext = Path(filename).suffix.lower()
+        
         try:
-            # Validate file
-            self._validate_file(file)
+            logger.info(f"Processing {file_ext} file: {filename}")
             
-            # Read file content
-            content = await file.read()
-            file_extension = os.path.splitext(file.filename)[1].lower()
-            
-            # Determine if OCR should be used
-            use_ocr = enable_ocr if enable_ocr is not None else self.enable_ocr
-            
-            # Extract text based on file type
-            if file_extension == '.pdf':
-                extracted_text, metadata = await self._extract_pdf(content, use_ocr)
-            elif file_extension == '.txt':
-                extracted_text, metadata = await self._extract_txt(content)
-            elif file_extension == '.csv':
-                extracted_text, metadata = await self._extract_csv(content)
-            elif file_extension in ['.docx', '.doc']:
-                extracted_text, metadata = await self._extract_docx(content)
+            # Read file based on extension
+            if file_ext == '.pdf':
+                text = await self._process_pdf(file_path, enable_ocr)
+            elif file_ext in ['.docx', '.doc']:
+                text = await self._process_docx(file_path)
+            elif file_ext == '.txt':
+                text = await self._process_txt(file_path)
+            elif file_ext == '.csv':
+                text = await self._process_csv(file_path)
             else:
-                raise ValueError(f"Unsupported file type: {file_extension}")
+                raise ValueError(f"Unsupported file type: {file_ext}")
             
-            # Chunk the text
-            chunks = self._chunk_text(extracted_text)
+            # Create chunks
+            chunks = self._create_chunks(text, chunk_size=1000, overlap=200)
             
-            # Calculate statistics
-            word_count = len(extracted_text.split())
-            char_count = len(extracted_text)
+            # Generate preview
+            preview = text[:500] if len(text) > 500 else text
             
-            result = {
-                "text": extracted_text,
+            return {
+                "text": text,
                 "chunks": chunks,
                 "chunk_count": len(chunks),
-                "word_count": word_count,
-                "char_count": char_count,
-                "file_type": file_extension,
-                "category": category,
-                "metadata": metadata,
-                "preview": extracted_text[:500] if len(extracted_text) > 500 else extracted_text
+                "preview": preview,
+                "metadata": {
+                    "filename": filename,
+                    "category": category,
+                    "file_type": file_ext,
+                    "ocr_used": enable_ocr,
+                    "ocr_confidence": None
+                }
             }
             
-            logger.info(
-                f"Processed document: {file.filename}, "
-                f"chunks: {len(chunks)}, words: {word_count}"
-            )
-            
-            return result
-            
         except Exception as e:
-            logger.error(f"Error processing document {file.filename}: {str(e)}")
+            logger.error(f"Error processing {filename}: {str(e)}", exc_info=True)
             raise
     
-    def _validate_file(self, file: UploadFile) -> None:
-        """Validate file size and type"""
-        file_extension = os.path.splitext(file.filename)[1].lower()
+    async def _process_pdf(self, file_path: str, enable_ocr: bool) -> str:
+        """Extract text from PDF"""
+        text = ""
         
-        if file_extension not in self.SUPPORTED_EXTENSIONS:
-            raise ValueError(
-                f"Unsupported file type: {file_extension}. "
-                f"Supported types: {', '.join(self.SUPPORTED_EXTENSIONS)}"
-            )
-        
-        # Note: file.size might not be available in all cases
-        # Size check can be done after reading content if needed
-    
-    async def _extract_pdf(
-        self,
-        content: bytes,
-        use_ocr: bool = True
-    ) -> Tuple[str, Dict[str, Any]]:
-        """
-        Extract text from PDF file
-        Falls back to OCR for scanned PDFs
-        """
-        metadata = {
-            "extraction_method": "text",
-            "page_count": 0,
-            "ocr_used": False
-        }
-        
-        try:
-            # Try standard text extraction first
-            pdf_reader = PyPDF2.PdfReader(io.BytesIO(content))
-            metadata["page_count"] = len(pdf_reader.pages)
+        with open(file_path, 'rb') as file:
+            pdf_reader = PyPDF2.PdfReader(file)
             
-            text = ""
             for page in pdf_reader.pages:
                 page_text = page.extract_text()
                 if page_text:
                     text += page_text + "\n"
-            
-            # If no text extracted and OCR is enabled, try OCR
-            if not text.strip() and use_ocr:
-                logger.info("No text found in PDF, attempting OCR...")
-                text, ocr_metadata = await self._ocr_pdf(content)
-                metadata.update(ocr_metadata)
-                metadata["extraction_method"] = "ocr"
-                metadata["ocr_used"] = True
-            
-            if not text.strip():
-                raise ValueError("No text could be extracted from PDF")
-            
-            return text, metadata
-            
-        except Exception as e:
-            logger.error(f"PDF extraction failed: {str(e)}")
-            raise ValueError(f"Failed to extract text from PDF: {str(e)}")
-    
-    async def _ocr_pdf(self, content: bytes) -> Tuple[str, Dict[str, Any]]:
-        """
-        Perform OCR on scanned PDF
-        """
-        metadata = {
-            "ocr_confidence": 0.0,
-            "ocr_pages_processed": 0
-        }
         
-        try:
-            # Convert PDF to images
-            images = convert_from_bytes(content, dpi=300)
-            metadata["ocr_pages_processed"] = len(images)
-            
-            text = ""
-            total_confidence = 0.0
-            
-            for i, image in enumerate(images):
-                logger.info(f"OCR processing page {i+1}/{len(images)}...")
-                
-                # Perform OCR with confidence data
-                try:
-                    ocr_data = pytesseract.image_to_data(
-                        image,
-                        output_type=pytesseract.Output.DICT
-                    )
-                    
-                    # Extract text and calculate average confidence
-                    page_text = pytesseract.image_to_string(image)
-                    text += page_text + "\n"
-                    
-                    # Calculate confidence
-                    confidences = [
-                        int(conf) for conf in ocr_data['conf']
-                        if conf != '-1'
-                    ]
-                    if confidences:
-                        page_confidence = sum(confidences) / len(confidences)
-                        total_confidence += page_confidence
-                        
-                except Exception as ocr_error:
-                    logger.warning(f"OCR failed for page {i+1}: {str(ocr_error)}")
-                    continue
-            
-            # Calculate average confidence across all pages
-            if metadata["ocr_pages_processed"] > 0:
-                metadata["ocr_confidence"] = total_confidence / metadata["ocr_pages_processed"]
-            
-            return text, metadata
-            
-        except Exception as e:
-            logger.error(f"OCR processing failed: {str(e)}")
-            raise ValueError(f"OCR failed: {str(e)}")
+        # TODO: Add OCR if enable_ocr and text is empty
+        
+        return text.strip()
     
-    async def _extract_txt(self, content: bytes) -> Tuple[str, Dict[str, Any]]:
-        """Extract text from TXT file"""
-        try:
-            # Try UTF-8 first, then fallback to other encodings
-            encodings = ['utf-8', 'latin-1', 'cp1252']
-            text = None
-            encoding_used = None
-            
-            for encoding in encodings:
-                try:
-                    text = content.decode(encoding)
-                    encoding_used = encoding
-                    break
-                except UnicodeDecodeError:
-                    continue
-            
-            if text is None:
-                raise ValueError("Could not decode text file with supported encodings")
-            
-            metadata = {
-                "encoding": encoding_used,
-                "line_count": len(text.split('\n'))
-            }
-            
-            return text, metadata
-            
-        except Exception as e:
-            logger.error(f"TXT extraction failed: {str(e)}")
-            raise ValueError(f"Failed to extract text from TXT file: {str(e)}")
+    async def _process_docx(self, file_path: str) -> str:
+        """Extract text from DOCX"""
+        doc = Document(file_path)
+        text = "\n".join([para.text for para in doc.paragraphs])
+        return text.strip()
     
-    async def _extract_csv(self, content: bytes) -> Tuple[str, Dict[str, Any]]:
-        """Extract text from CSV file"""
-        try:
-            # Decode content
-            text_content = content.decode('utf-8')
+    async def _process_txt(self, file_path: str) -> str:
+        """Read text file"""
+        with open(file_path, 'r', encoding='utf-8') as file:
+            return file.read().strip()
+    
+    async def _process_csv(self, file_path: str) -> str:
+        """Convert CSV to text"""
+        text_parts = []
+        
+        with open(file_path, 'r', encoding='utf-8') as file:
+            csv_reader = csv.DictReader(file)
             
-            # Parse CSV
-            csv_reader = csv.DictReader(io.StringIO(text_content))
-            rows = list(csv_reader)
-            
-            # Convert to text format
-            text_parts = []
-            for i, row in enumerate(rows):
-                row_text = f"Record {i+1}:\n"
-                for key, value in row.items():
-                    row_text += f"  {key}: {value}\n"
+            for row in csv_reader:
+                row_text = ", ".join([f"{k}: {v}" for k, v in row.items()])
                 text_parts.append(row_text)
-            
-            text = "\n".join(text_parts)
-            
-            metadata = {
-                "row_count": len(rows),
-                "column_count": len(rows[0].keys()) if rows else 0,
-                "columns": list(rows[0].keys()) if rows else []
-            }
-            
-            return text, metadata
-            
-        except Exception as e:
-            logger.error(f"CSV extraction failed: {str(e)}")
-            raise ValueError(f"Failed to extract text from CSV file: {str(e)}")
+        
+        return "\n".join(text_parts)
     
-    async def _extract_docx(self, content: bytes) -> Tuple[str, Dict[str, Any]]:
-        """Extract text from DOCX file"""
-        try:
-            # Save to temporary file (python-docx requires file path)
-            with tempfile.NamedTemporaryFile(delete=False, suffix='.docx') as tmp:
-                tmp.write(content)
-                tmp_path = tmp.name
-            
-            try:
-                # Open and extract text
-                doc = Document(tmp_path)
-                
-                paragraphs = [para.text for para in doc.paragraphs]
-                text = "\n".join(paragraphs)
-                
-                # Extract table content
-                table_text = []
-                for table in doc.tables:
-                    for row in table.rows:
-                        row_text = " | ".join([cell.text for cell in row.cells])
-                        table_text.append(row_text)
-                
-                if table_text:
-                    text += "\n\nTables:\n" + "\n".join(table_text)
-                
-                metadata = {
-                    "paragraph_count": len(paragraphs),
-                    "table_count": len(doc.tables)
-                }
-                
-                return text, metadata
-                
-            finally:
-                # Clean up temporary file
-                if os.path.exists(tmp_path):
-                    os.remove(tmp_path)
-                    
-        except Exception as e:
-            logger.error(f"DOCX extraction failed: {str(e)}")
-            raise ValueError(f"Failed to extract text from DOCX file: {str(e)}")
-    
-    def _chunk_text(self, text: str) -> List[str]:
-        """Split text into chunks for embedding"""
-        try:
-            chunks = self.text_splitter.split_text(text)
-            return chunks
-        except Exception as e:
-            logger.error(f"Text chunking failed: {str(e)}")
-            raise ValueError(f"Failed to chunk text: {str(e)}")
+    def _create_chunks(self, text: str, chunk_size: int, overlap: int) -> List[str]:
+        """Split text into overlapping chunks"""
+        chunks = []
+        start = 0
+        
+        while start < len(text):
+            end = start + chunk_size
+            chunk = text[start:end]
+            chunks.append(chunk)
+            start = end - overlap
+        
+        return chunks
     
     def estimate_tokens(self, text: str) -> int:
-        """
-        Estimate token count (rough approximation)
-        ~4 characters per token on average
-        """
+        """Rough token estimation (1 token ≈ 4 characters)"""
         return len(text) // 4
+    
+    async def store_in_vectordb(
+        self, 
+        chunks: List[str], 
+        metadata: Dict,
+        namespace: str = "default"  # ✅ ADD NAMESPACE PARAMETER
+    ) -> List[str]:
+        """
+        Store chunks in Pinecone with client-specific namespace
+        
+        Args:
+            chunks: Text chunks to embed and store
+            metadata: Document metadata (must include client_id)
+            namespace: Pinecone namespace for isolation
+            
+        Returns:
+            List of vector IDs
+        """
+        from utils.tools import vectorstore, embed_model
+        
+        try:
+            logger.info(f"Storing {len(chunks)} chunks in namespace: {namespace}")
+            
+            # Generate embeddings for all chunks
+            vector_ids = []
+            
+            for i, chunk in enumerate(chunks):
+                # Create metadata for this chunk
+                chunk_metadata = {
+                    **metadata,
+                    "chunk_index": i,
+                    "chunk_text": chunk[:200],  # Preview
+                    "namespace": namespace
+                }
+                
+                # Add to Pinecone with namespace
+                result = vectorstore.add_texts(
+                    texts=[chunk],
+                    metadatas=[chunk_metadata],
+                    namespace=namespace  # ✅ ISOLATE BY NAMESPACE
+                )
+                
+                if result:
+                    vector_ids.extend(result)
+            
+            logger.info(f"✅ Stored {len(vector_ids)} vectors in namespace {namespace}")
+            
+            return vector_ids
+            
+        except Exception as e:
+            logger.error(f"Failed to store in vector DB: {e}", exc_info=True)
+            raise
 
 
 # Singleton instance

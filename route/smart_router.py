@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from typing import Annotated
 import logging
 
-from security.authentication import AuthenticateTier1Model
+from security.authentication import get_client_context
 from model.schema import RequestPayload, PayloadResponse
 from config.database import get_db
 from utils.complexity_analyzer import complexity_analyzer
@@ -24,42 +24,39 @@ logger = logging.getLogger(__name__)
 @router.post("/auto_route", response_model=PayloadResponse)
 async def auto_route_handler(
     data: RequestPayload,
-    api_key: Annotated[str, Depends(AuthenticateTier1Model)],
+    client: dict = Depends(get_client_context),  # ✅ INJECT CLIENT
     db: Session = Depends(get_db)
 ):
     """
-    Automatically route query to appropriate tier based on complexity
-    
-    - Tier 1 (0-30): Simple queries, greetings, basic FAQs
-    - Tier 2 (31-70): Moderate complexity, retrieval + analysis
-    - Tier 3 (71-100): Complex multi-step reasoning
+    Smart routing with client-specific knowledge base access
     """
+    
+    client_id = client["client_id"]
+    logger.info(f"Auto-routing query for client: {client['client_name']} ({client_id})")
     
     try:
         # Fast complexity analysis
         complexity_result = complexity_analyzer.analyze_fast(data.user_query)
         
-        logger.info(f"Auto-routing query with complexity={complexity_result.score} to {complexity_result.tier}")
+        logger.info(f"Routing to {complexity_result.tier} for client {client_id} (score={complexity_result.score})")
         
-        # Route based on tier
+        # Route to appropriate tier (all will have client context)
         if complexity_result.tier == 'tier1':
-            return await tier_1_handler(data, api_key, db)
+            return await tier_1_handler(data, client, db)
         
         elif complexity_result.tier == 'tier2':
-            # Use LLM for more accurate analysis
             complexity_result = await complexity_analyzer.analyze_with_llm(data.user_query)
             
-            # Re-check after LLM analysis
             if complexity_result.score < 31:
-                return await tier_1_handler(data, api_key, db)
+                return await tier_1_handler(data, client, db)
             elif complexity_result.score > 70:
-                return tier_3_model_handler(data, api_key, db)
+                return tier_3_model_handler(data, client, db)
             else:
-                return await tier_2_handler(data, api_key, db)
+                return await tier_2_handler(data, client, db)
         
         else:  # tier3
-            return tier_3_model_handler(data, api_key, db)
+            return tier_3_model_handler(data, client, db)
     
     except Exception as e:
-        logger.error(f"Auto-routing failed: {str(e)}", exc_info=True)
+        logger.error(f"Auto-routing failed for client {client_id}: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Routing error: {str(e)}")

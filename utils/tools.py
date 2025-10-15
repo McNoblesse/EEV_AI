@@ -87,44 +87,63 @@ def send_mail_to_human_agent_sync(mail_input: dict) -> str:
         return f"Error sending email: {str(e)}"
 
 @tool
-def retriever_tool(query: str) -> str:
+def retriever_tool(query: str, client_id: str = "default_client", namespace: str = None) -> str:
     """
-    Retrieve relevant information from knowledge base for customer queries.
+    Retrieve relevant information from client-specific knowledge base
     
     Args:
-        query (str): Search query for relevant information
+        query: Search query
+        client_id: Client identifier for namespace isolation
+        namespace: Optional specific namespace (auto-generated if not provided)
         
     Returns:
-        str: Retrieved information or error message
+        Retrieved information or error message
     """
     if not query or not query.strip():
         return "Error: Please provide a search query"
     
     try:
-        # Perform similarity search
-        results = vectorstore.similarity_search(query.strip(), k=3)
+        # Determine namespace
+        if not namespace:
+            namespace = f"client_{client_id}"  # Default namespace pattern
+        
+        logger.info(f"🔍 Searching in namespace: {namespace} for client: {client_id}")
+        
+        # ✅ QUERY SPECIFIC NAMESPACE ONLY
+        results = vectorstore.similarity_search(
+            query.strip(), 
+            k=3,
+            namespace=namespace  # ✅ CLIENT-SPECIFIC SEARCH
+        )
         
         if not results:
-            return f"No relevant information found for: '{query}'"
+            return f"No relevant information found in your knowledge base for: '{query}'"
         
         # Format results
         formatted_results = []
         for i, doc in enumerate(results, 1):
-            # Use metadata text if available, otherwise page content
             text = doc.metadata.get('text', doc.page_content)
-            source = doc.metadata.get('source', 'Unknown')
+            source = doc.metadata.get('filename', 'Unknown')
             
-            # Truncate long text
+            # ✅ VERIFY CLIENT ID IN METADATA (EXTRA SAFETY)
+            doc_client = doc.metadata.get('client_id')
+            if doc_client and doc_client != client_id:
+                logger.warning(f"⚠️ Namespace leak detected! Expected {client_id}, got {doc_client}")
+                continue
+            
             if len(text) > 500:
                 text = text[:500] + "..."
                 
             formatted_results.append(f"Result {i} (Source: {source}): {text}")
         
+        if not formatted_results:
+            return "No relevant information found in your knowledge base"
+        
         return "\n\n".join(formatted_results)
         
     except Exception as e:
-        logger.error(f"Knowledge retrieval failed: {str(e)}")
-        return f"Search failed: {str(e)}"
+        logger.error(f"Retrieval error for client {client_id}: {str(e)}", exc_info=True)
+        return f"I encountered an error searching the knowledge base: {str(e)}"
 
 @tool
 def greeting_response_tool(user_message: str) -> str:

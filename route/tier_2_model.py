@@ -14,7 +14,7 @@ from langchain_core.prompts import ChatPromptTemplate
 import logging
 from datetime import datetime
 
-from security.authentication import AuthenticateTier1Model
+from security.authentication import get_client_context
 from model.schema import RequestPayload, PayloadResponse
 from config.database import get_db
 from model.database_models import Conversation, ConversationAnalytics
@@ -30,18 +30,22 @@ llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
 @router.post("/tier_2_model", response_model=PayloadResponse)
 async def tier_2_handler(
     data: RequestPayload,
-    api_key: Annotated[str, Depends(AuthenticateTier1Model)],
+    client: dict = Depends(get_client_context),  # ✅ INJECT CLIENT
     db: Session = Depends(get_db)
 ):
     """
-    Tier 2: Moderate complexity queries with retrieval + analysis
-    Complexity threshold: 31-70
+    Tier 2: Moderate complexity with client-specific knowledge retrieval
     """
+    
+    client_id = client["client_id"]
+    namespace = f"{client['namespace_prefix']}_{data.category if hasattr(data, 'category') else 'general'}"
+    
+    logger.info(f"Tier 2 query from client: {client['client_name']} ({client_id})")
     
     start_time = datetime.now()
     
     try:
-        # Check complexity
+        # Complexity analysis
         complexity_result = await complexity_analyzer.analyze_with_llm(data.user_query)
         
         # Route to Tier 1 if too simple (score < 31)
@@ -97,21 +101,28 @@ async def tier_2_handler(
         # Handle Tier 2 queries (31-70)
         logger.info(f"Processing Tier 2 query: score={complexity_result.score}")
         
-        # Retrieve knowledge base
-        kb_results = retriever_tool.invoke({"query": data.user_query})
+        # ✅ RETRIEVE WITH CLIENT CONTEXT
+        kb_results = retriever_tool.invoke({
+            "query": data.user_query,
+            "client_id": client_id,  # ✅ CLIENT-SPECIFIC
+            "namespace": namespace  # ✅ ISOLATED NAMESPACE
+        })
         
-        # Generate response with context
+        # Generate response
         prompt = ChatPromptTemplate.from_messages([
-            ("system", """You are eeV Assistant. Provide helpful, accurate responses using the knowledge base context.
+            ("system", f"""You are eeV Assistant for {client['client_name']}.
 
-If the query requires technical expertise or you're unsure, recommend escalation to a specialist."""),
-            ("human", "Query: {query}\n\nKnowledge Base Context:\n{context}\n\nProvide a helpful response:")
+Provide helpful, accurate responses using ONLY the knowledge base context provided.
+
+IMPORTANT: You can ONLY answer based on the knowledge base for {client['client_name']}. 
+If the information is not in the provided context, clearly state that you don't have that information in the knowledge base."""),
+            ("human", "Query: {query}\n\nKnowledge Base Context:\n{context}\n\nProvide response:")
         ])
         
         chain = prompt | llm
         response = await chain.ainvoke({
             "query": data.user_query,
-            "context": kb_results[:2000] if kb_results else "No specific documentation found."
+            "context": kb_results[:2000] if kb_results else f"No specific documentation found in {client['client_name']}'s knowledge base."
         })
         
         ai_response = response.content
@@ -135,6 +146,7 @@ If the query requires technical expertise or you're unsure, recommend escalation
         
         # Save to database - MAIN CONVERSATION TABLE
         conversation = Conversation(
+            client_id=client_id,  # ✅ NEW
             session_id=data.session_id,
             user_query=data.user_query,
             bot_response=ai_response,
@@ -206,6 +218,6 @@ If the query requires technical expertise or you're unsure, recommend escalation
         )
         
     except Exception as e:
-        logger.error(f"Tier 2 error: {str(e)}", exc_info=True)
+        logger.error(f"Tier 2 error for client {client_id}: {str(e)}", exc_info=True)
         db.rollback()
-        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Processing failed: {str(e)}")
