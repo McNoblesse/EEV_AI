@@ -1,5 +1,5 @@
-venv/                → ignore your virtual environment folder  
-.ipynb_checkpoints/  → ignore Jupyter notebook checkpoint files  
-*__pycache__/        → ignore Python cache directories  
-.env                 → ignore environment variable files  
-*.ipynb              → ignore all Jupyter notebook files
+venv/               
+.ipynb_checkpoints/  
+*__pycache__/       
+.env                 
+*.ipynb             
