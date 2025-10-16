@@ -11,7 +11,7 @@ A modern AI-powered application built with FastAPI and Python.
 
 1. Clone the repository:
 ```bash
-git clone [<repository-url>](https://github.com/PacerLabs/eeV-AI.git)
+git clone https://github.com/PacerLabs/eeV-AI.git
 cd eeV-AI-Restructured
 ```
 
