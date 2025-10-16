@@ -4,14 +4,14 @@ A modern AI-powered application built with FastAPI and Python.
 
 ## Prerequisites
 
-- Python 3.8 or higher
+- Python 3.11.9
 - pip (Python package installer)
 
 ## Installation
 
 1. Clone the repository:
 ```bash
-git clone <repository-url>
+git clone [<repository-url>](https://github.com/PacerLabs/eeV-AI.git)
 cd eeV-AI-Restructured
 ```
 
@@ -98,11 +98,3 @@ If you encounter any issues:
 2. Verify you're in the correct directory (`app/`) when running uvicorn
 
 3. Check that port 8000 is not already in use by another application
-
-## License
-
-[Add your license information here]
-
-## Contributing
-
-[Add contribution guidelines here]
