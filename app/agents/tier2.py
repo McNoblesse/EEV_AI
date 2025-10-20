@@ -1,12 +1,12 @@
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
 
-from toolkit.agent_toolkit import SendEmail
-from memory.load_conversation import LoadConversations
-from schemas.agent_schemas import AgentSchema, EmailSummaryAgentSchema
+from app.toolkit.agent_toolkit import SendEmail
+from app.memory.load_conversation import LoadConversations
+from app.schemas.agent_schemas import AgentSchema, EmailSummaryAgentSchema
 
 import os
-from eev_configurations.config import settings
+from app.eev_configurations.config import settings
 os.environ["OPENAI_API_KEY"] = settings.OPENAI_API_KEY
 
 def Tier2(state: AgentSchema):

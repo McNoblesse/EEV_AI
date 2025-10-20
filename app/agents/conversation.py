@@ -1,5 +1,5 @@
 from langchain_openai import ChatOpenAI
-from schemas.agent_schemas import AgentSchema
+from app.schemas.agent_schemas import AgentSchema
 from langchain_core.prompts import ChatPromptTemplate
 
 def ConversationAgent(state:AgentSchema):

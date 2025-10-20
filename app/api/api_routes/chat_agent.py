@@ -1,13 +1,13 @@
 from typing import Annotated
 from fastapi import HTTPException, status, APIRouter, Depends
 
-from api.logger.api_logs import logger
-from api.auth.api_auth import endpoint_auth
-from memory.store_conversation import StoreChat
-from eevAI_bot.compile_bot import compiled_agent
-from memory.load_conversation import LoadConversations
-from toolkit.agent_toolkit import GenerateDataFromUserQuery
-from api.model.schema import ChatAgentPayload, ChatAgentResponse
+from app.api.logger.api_logs import logger
+from app.api.auth.api_auth import endpoint_auth
+from app.memory.store_conversation import StoreChat
+from app.eevAI_bot.compile_bot import compiled_agent
+from app.memory.load_conversation import LoadConversations
+from app.toolkit.agent_toolkit import GenerateDataFromUserQuery
+from app.api.model.schema import ChatAgentPayload, ChatAgentResponse
 
 
 router = APIRouter(prefix="/chat-agent",

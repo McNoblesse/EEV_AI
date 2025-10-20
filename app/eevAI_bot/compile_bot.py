@@ -1,10 +1,10 @@
 from langgraph.graph import StateGraph, START, END
 
-from agents.tier1 import Tier1
-from agents.tier2 import Tier2
-from agents.router_agent import AgentRouter
-from schemas.agent_schemas import AgentSchema
-from agents.conversation import ConversationAgent
+from app.agents.tier1 import Tier1
+from app.agents.tier2 import Tier2
+from app.agents.router_agent import AgentRouter
+from app.schemas.agent_schemas import AgentSchema
+from app.agents.conversation import ConversationAgent
 
 agent_graph = StateGraph(AgentSchema)
 

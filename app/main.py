@@ -1,5 +1,5 @@
 from fastapi import FastAPI
-from api.api_routes import chat_agent, knowledge_base
+from app.api.api_routes import chat_agent, knowledge_base
 
 app = FastAPI(title="eeV-AI Bot API")
 

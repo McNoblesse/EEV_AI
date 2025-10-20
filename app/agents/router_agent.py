@@ -1,10 +1,10 @@
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
 
-from schemas.agent_schemas import AgentSchema, RouterSchema
+from app.schemas.agent_schemas import AgentSchema, RouterSchema
 
 import os
-from eev_configurations.config import settings
+from app.eev_configurations.config import settings
 os.environ["OPENAI_API_KEY"] = settings.OPENAI_API_KEY
 
 def AgentRouter(state:AgentSchema):

@@ -3,7 +3,7 @@ from fastapi import Security, status
 from fastapi.security import APIKeyHeader
 from fastapi.exceptions import HTTPException
 
-from eev_configurations.config import settings
+from app.eev_configurations.config import settings
 
 api_key_header = APIKeyHeader(name="api-key-header")
 

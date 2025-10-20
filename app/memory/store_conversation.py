@@ -1,7 +1,7 @@
 from psycopg_pool import ConnectionPool
 
-from eev_configurations.config import settings
-from api.logger.api_logs import logger
+from app.eev_configurations.config import settings
+from app.api.logger.api_logs import logger
 
 def StoreChat(session_id, user_message, ai_response, intent, sentiment, complexity_score, agent_used):
     try:

@@ -1,6 +1,6 @@
+from fastapi import Body
+from typing import Annotated
 from pydantic import BaseModel
-from fastapi import Body, UploadFile
-from typing import Annotated, List
 
 class ChatAgentPayload(BaseModel):
     user_query: Annotated[str, Body(..., description="User's current query.")]

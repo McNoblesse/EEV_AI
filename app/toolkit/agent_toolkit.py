@@ -12,11 +12,11 @@ from langchain_core.prompts import PromptTemplate, ChatPromptTemplate
 from langchain_community.document_loaders.parsers import LLMImageBlobParser
 from langchain_google_genai import ChatGoogleGenerativeAI
 
-from api.logger.api_logs import logger
-from schemas.agent_schemas import UserQueryAnalysisSchema
+from app.api.logger.api_logs import logger
+from app.schemas.agent_schemas import UserQueryAnalysisSchema
 
 import os
-from eev_configurations.config import settings
+from app.eev_configurations.config import settings
 resend.api_key = settings.RESEND_API
 os.environ["GOOGLE_API_KEY"] = settings.GEMINI_API_KEY
 os.environ["PINECONE_API_KEY"] = settings.PINECONE_API_KEY

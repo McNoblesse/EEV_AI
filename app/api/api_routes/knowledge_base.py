@@ -1,6 +1,6 @@
-from api.logger.api_logs import logger
-from api.auth.api_auth import endpoint_auth
-from toolkit.agent_toolkit import ExtractAndSplitContentFromFile, EmbeddDoc
+from app.api.logger.api_logs import logger
+from app.api.auth.api_auth import endpoint_auth
+from app.toolkit.agent_toolkit import ExtractAndSplitContentFromFile, EmbeddDoc
 
 from typing import List
 from fastapi import (

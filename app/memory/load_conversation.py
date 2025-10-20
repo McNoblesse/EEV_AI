@@ -1,7 +1,7 @@
 from jinja2 import Template
 from psycopg_pool import ConnectionPool
 
-from eev_configurations.config import settings
+from app.eev_configurations.config import settings
 
 def LoadConversations(session_id, limit=None):
     template_str = """Chat History (last {{limit}} messages)
