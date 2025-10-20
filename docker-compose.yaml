@@ -1,0 +1,11 @@
+services:
+  api:
+    container_name: eeV-AI
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      - PYTHONPATH=/app
+    volumes:
+      - ./app:/app
+    restart: unless-stopped
