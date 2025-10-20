@@ -17,3 +17,5 @@ pydantic-settings==2.11.0
 pydantic_core==2.33.2
 PyMuPDF==1.26.5
 resend==2.15.0
+fastapi==0.118.0
+uvicorn==0.37.0
