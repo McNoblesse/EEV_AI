@@ -11,3 +11,8 @@ class ChatAgentResponse(BaseModel):
     bot_response: str
     session_id: str
     
+class DeleteKnowledgeBaseResponse(BaseModel):
+    message: str
+
+class CreateKnowledgeBaseResponse(BaseModel):
+    results: list[dict]

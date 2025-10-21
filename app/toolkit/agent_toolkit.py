@@ -108,7 +108,7 @@ async def BatchUpload(extracted_data, vector_store, batch_size: int = 100):
             vector_store.add_documents(documents=batch_docs, ids=batch_uuids)
             logger.info(f"Uploaded batch {i // batch_size + 1} ({len(batch_docs)} documents)")
 
-async def ExtractAndSplitContentFromFile(upload_file):
+async def ExtractAndSplitContentFromFile(upload_file, doc_id: str = None):
     # Extract file extension
     filename = upload_file.filename.lower()
     file_ext = filename.split(".")[-1]
@@ -137,8 +137,10 @@ async def ExtractAndSplitContentFromFile(upload_file):
 
         docs = loader.load()
         
+        for doc in docs:
+            doc.metadata["doc_id"] = doc_id.lower()
+            
         logger.info(f"Extracted {len(docs)} documents from {upload_file.filename}")
-    
         return docs
 
     finally:
@@ -166,3 +168,15 @@ async def EmbeddDoc(index_name: str, extracted_data):
             embedding=embeddings
         )
         await BatchUpload(extracted_data, vector_store)
+        
+
+async def DeleteIndex(index_name: str, doc_id: str):
+    vectorstore = PineconeVectorStore.from_existing_index(
+        index_name=index_name,
+        embedding=embeddings
+    )
+    if DoesIndexExist(index_name):
+        vectorstore.delete(filter={"doc_id":{"$eq": doc_id}})
+        logger.info(f"Index '{index_name}' deleted successfully.")
+    else:
+        logger.warning(f"Index '{index_name}' does not exist. Cannot delete.")
