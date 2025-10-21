@@ -8,10 +8,12 @@ WORKDIR /app
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 
-# Install build dependencies
+# Install build dependencies and PostgreSQL client libraries
 RUN apt-get update && apt-get install -y \
     gcc \
     g++ \
+    libpq-dev \
+    postgresql-client \
     && rm -rf /var/lib/apt/lists/*
 
 # Install uvicorn
@@ -27,5 +29,9 @@ COPY . .
 # Expose the app port
 EXPOSE 8000
 
-# Remove unnecessary PYTHONPATH (so Python finds 'app.main' correctly)
+# Set PYTHONPATH to help find modules
+ENV PYTHONPATH=/app
+
+# Change to app directory and start uvicorn
+WORKDIR /app/app
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
