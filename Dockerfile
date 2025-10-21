@@ -29,5 +29,9 @@ COPY . .
 # Expose the app port
 EXPOSE 8000
 
-# Remove unnecessary PYTHONPATH (so Python finds 'app.main' correctly)
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Set PYTHONPATH to help find modules
+ENV PYTHONPATH=/app
+
+# Change to app directory and start uvicorn
+WORKDIR /app/app
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
