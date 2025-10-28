@@ -1,9 +1,10 @@
 from jinja2 import Template
-from psycopg_pool import ConnectionPool
+from psycopg_pool import AsyncConnectionPool
 
+from app.api.logger.api_logs import logger
 from app.eev_configurations.config import settings
 
-def LoadConversations(session_id, limit=None):
+async def LoadConversations(session_id, limit=None):
     template_str = """Chat History (last {{limit}} messages)
 {% for i in messages -%}
 {% if i['role'] == 'user' -%}
@@ -15,28 +16,35 @@ def LoadConversations(session_id, limit=None):
 """
     template = Template(template_str)
     
-    with ConnectionPool(conninfo=settings.MEMORY_DB).connection() as conn:
-        with conn.cursor() as cur:
-            if limit is None:
-                cur.execute("""
-                    SELECT user_query, bot_response, created_at
-                    FROM conversations
-                    WHERE session_id = %s
-                    ORDER BY created_at DESC
-                    """,
-                    (session_id,)
-                )
-            else:
-                cur.execute("""
-                    SELECT user_query, bot_response, created_at
-                    FROM conversations
-                    WHERE session_id = %s
-                    ORDER BY created_at DESC
-                    LIMIT %s
-                    """,
-                    (session_id, limit)
-                )
-            session_messages = cur.fetchall()
+    try:
+        async with AsyncConnectionPool(conninfo=settings.MEMORY_DB) as pool:
+            async with pool.connection() as conn:
+                async with conn.cursor() as cur:
+                    if limit is None:
+                        await cur.execute("""
+                            SELECT user_query, bot_response, created_at
+                            FROM conversations
+                        WHERE session_id = %s
+                        ORDER BY created_at DESC
+                        """,
+                        (session_id,)
+                    )
+                        
+                    else:
+                        await cur.execute("""
+                            SELECT user_query, bot_response, created_at
+                            FROM conversations
+                            WHERE session_id = %s
+                            ORDER BY created_at DESC
+                            LIMIT %s
+                            """,
+                            (session_id, limit)
+                        )
+                        
+                    session_messages = await cur.fetchall()
+    except Exception as e:
+        logger.error(f"Error loading conversations: {e}")
+        session_messages = []
 
     if not session_messages:
         return "Chat History (last 10 messages)\nNo recent Chat"

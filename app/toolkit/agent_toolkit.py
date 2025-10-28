@@ -1,11 +1,12 @@
-import resend
-import asyncio
-import tempfile
 from uuid import uuid4
+from io import BytesIO
+from typing import Dict
+from openai import AsyncOpenAI
 from langchain_openai import ChatOpenAI
 from langchain.chains import RetrievalQA
 from pinecone import Pinecone, ServerlessSpec
 from langchain_openai import OpenAIEmbeddings
+import httpx, resend, asyncio, tempfile, base64
 from langchain_community.document_loaders import PyMuPDFLoader
 from langchain_pinecone.vectorstores import PineconeVectorStore
 from langchain_core.prompts import PromptTemplate, ChatPromptTemplate
@@ -22,6 +23,8 @@ os.environ["GOOGLE_API_KEY"] = settings.GEMINI_API_KEY
 os.environ["PINECONE_API_KEY"] = settings.PINECONE_API_KEY
 os.environ["OPENAI_API_KEY"] = settings.OPENAI_API_KEY
 
+client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
+
 # Send email tooklit
 def SendEmail(from_email, to_email, subject, html):
     r = resend.Emails.send({
@@ -35,6 +38,7 @@ embeddings = OpenAIEmbeddings(model=settings.OPENAI_EMBEDDING_NAME)
 
 pc = Pinecone()
 
+# Knowledge Base toolkit
 def InitializeVectorStore(index_name:str):
     index = pc.Index(index_name)
     vectorstore = PineconeVectorStore(index=index, embedding=embeddings)
@@ -108,6 +112,8 @@ async def BatchUpload(extracted_data, vector_store, batch_size: int = 100):
             vector_store.add_documents(documents=batch_docs, ids=batch_uuids)
             logger.info(f"Uploaded batch {i // batch_size + 1} ({len(batch_docs)} documents)")
 
+
+# Extract and split content from uploaded file
 async def ExtractAndSplitContentFromFile(upload_file, doc_id: str = None):
     # Extract file extension
     filename = upload_file.filename.lower()
@@ -147,6 +153,8 @@ async def ExtractAndSplitContentFromFile(upload_file, doc_id: str = None):
         # Always clean up temp file
         os.remove(temp_path)
 
+
+# Embed documents into Pinecone index
 async def EmbeddDoc(index_name: str, extracted_data):
     if DoesIndexExist(index_name):
         vector_store = PineconeVectorStore(
@@ -169,7 +177,7 @@ async def EmbeddDoc(index_name: str, extracted_data):
         )
         await BatchUpload(extracted_data, vector_store)
         
-
+# Delete Knowledge Base toolkit
 async def DeleteIndex(index_name: str, doc_id: str):
     vectorstore = PineconeVectorStore.from_existing_index(
         index_name=index_name,

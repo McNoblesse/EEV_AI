@@ -10,6 +10,7 @@ class ChatAgentPayload(BaseModel):
 class ChatAgentResponse(BaseModel):
     bot_response: str
     session_id: str
+    is_escalated: bool
     
 class DeleteKnowledgeBaseResponse(BaseModel):
     message: str

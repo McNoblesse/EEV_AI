@@ -17,5 +17,5 @@ class Settings(BaseSettings):
     PINECONE_CLOUD:str
     PINECONE_REGION:str
     ENDPOINT_AUTH_KEY:str
-    
+
 settings = Settings()

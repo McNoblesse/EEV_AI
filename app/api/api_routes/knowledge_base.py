@@ -44,4 +44,5 @@ async def create_knowledge_base(
         except Exception as e:
             logger.error(f"Error processing file {file.filename}: {e}")
             results.append({"file": file.filename, "status": "failed", "error": str(e)})
+    
     return CreateKnowledgeBaseResponse(results=results)

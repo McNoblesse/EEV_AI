@@ -25,20 +25,20 @@ async def chat_agent_endpoint(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid authentication key"
         )
-    logger.info(f"Received chat agent request for session_id: {payload.session_id}")
-    chat_history = LoadConversations(session_id=payload.session_id, limit=20)
+    logger.info(f"Loading chat history for session_id: {payload.session_id}")
+    chat_history = await LoadConversations(session_id=payload.session_id, limit=20)
     
     logger.info(f"Invoking agent: {payload.session_id}")
     bot_response = compiled_agent.invoke({"user_query":payload.user_query,
                                           "chat_history":chat_history, 
-                                          "index_name":payload.index_name,
-                                          "session_id":payload.session_id})
+                                          "index_name":payload.index_name})
     
     logger.info(f"Agent response for session_id {payload.session_id}: {bot_response['bot_response']}")
     
     try:
         return ChatAgentResponse(bot_response=bot_response['bot_response'],
-                                 session_id=payload.session_id)
+                                 session_id=payload.session_id,
+                                 is_escalated=True if bot_response["agent_used"] == "tier_2" else False)
     except Exception as e:
         logger.error(f"Error in chat agent endpoint: {e}")
         raise HTTPException(
@@ -49,14 +49,15 @@ async def chat_agent_endpoint(
         data = await GenerateDataFromUserQuery(payload.user_query)
         
         # Store chat and analysis data
-        StoreChat(
+        await StoreChat(
                   session_id=payload.session_id, 
                   user_message=payload.user_query,
                   ai_response=bot_response['bot_response'],
                   intent=data.intent,
                   sentiment=data.sentiment,
                   complexity_score=data.complexity_score,
-                  agent_used=bot_response["agent_used"]
+                  agent_used=bot_response["agent_used"],
+                  channel_used="chat_channel"
                   )
         
         logger.info(f"Chat stored for session_id: {payload.session_id}")

@@ -5,7 +5,6 @@ class AgentSchema(TypedDict):
     user_query:str
     bot_response:str
     chat_history:str
-    session_id:str
     index_name:str
     agent_used:Literal["tier_1", "tier_2", "conversation"]
 
