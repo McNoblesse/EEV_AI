@@ -8,7 +8,7 @@ from app.eev_configurations.config import settings
 os.environ["OPENAI_API_KEY"] = settings.OPENAI_API_KEY
 
 def AgentRouter(state:AgentSchema):
-    route_llm = ChatOpenAI(model="gpt-5-mini")
+    route_llm = ChatOpenAI(model="gpt-4o-mini")
     
     prompt = ChatPromptTemplate.from_messages([
         ("system", """You are an intelligent routing system for eevAI, a customer service chatbot. 

@@ -45,26 +45,28 @@ def InitializeVectorStore(index_name:str):
     retriever = vectorstore.as_retriever()
 
     prompt = PromptTemplate(
-        input_variables=["context", "question"],
-        template="""You are a helpful customer service AI assistant for eeV AI Platform. Your job is to provide clear and accurate answers to customer questions.
+    input_variables=["context", "question"],
+    template="""You are a helpful customer service AI assistant for eeV AI Platform. Your job is to provide clear and accurate answers to customer questions.
 
 INSTRUCTIONS:
 - Use only the information in the context below.
-- Do NOT mention or reference the “knowledge base” in any form.
+- Consider the conversation history to understand the full context of the question.
+- Do NOT mention or reference the "knowledge base" in any form.
 - Give short, direct, and complete answers.
 - Provide step-by-step instructions when needed.
 - Keep a friendly and professional tone.
-- If the answer isn’t in the context, say so clearly and suggest contacting support.
+- If the answer isn't in the context, say so clearly and suggest contacting support.
 - Focus on helping the customer solve the issue on their own.
+- If the question references something from earlier in the conversation, use that context.
 
 CONTEXT:
 {context}
 
-CUSTOMER QUESTION:
+CONVERSATION HISTORY + CUSTOMER QUESTION:
 {question}
 
 RESPONSE:"""
-    )
+)
 
     llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=0)
 
@@ -178,13 +180,28 @@ async def EmbeddDoc(index_name: str, extracted_data):
         await BatchUpload(extracted_data, vector_store)
         
 # Delete Knowledge Base toolkit
+from fastapi import HTTPException
+
+# Delete Knowledge Base toolkit
 async def DeleteIndex(index_name: str, doc_id: str):
     vectorstore = PineconeVectorStore.from_existing_index(
         index_name=index_name,
         embedding=embeddings
     )
     if DoesIndexExist(index_name):
-        vectorstore.delete(filter={"doc_id":{"$eq": doc_id}})
-        logger.info(f"Index '{index_name}' deleted successfully.")
+        # Check if the doc_id exists
+        results = vectorstore._index.query(
+            top_k=1,
+            filter={"doc_id": {"$eq": doc_id}},
+            include_values=False
+        )
+
+        if not results.get("matches"):  # No match found
+            raise HTTPException(status_code=404, detail=f"Document ID '{doc_id}' not found in index '{index_name}'")
+
+        # Proceed with deletion
+        vectorstore.delete(filter={"doc_id": {"$eq": doc_id}})
+        logger.info(f"Document '{doc_id}' deleted successfully from index '{index_name}'.")
     else:
         logger.warning(f"Index '{index_name}' does not exist. Cannot delete.")
+        raise HTTPException(status_code=404, detail=f"Index '{index_name}' does not exist.")

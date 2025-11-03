@@ -31,6 +31,7 @@ async def chat_agent_endpoint(
     logger.info(f"Invoking agent: {payload.session_id}")
     bot_response = compiled_agent.invoke({"user_query":payload.user_query,
                                           "chat_history":chat_history, 
+                                          "session_id":payload.session_id,
                                           "index_name":payload.index_name})
     
     logger.info(f"Agent response for session_id {payload.session_id}: {bot_response['bot_response']}")
