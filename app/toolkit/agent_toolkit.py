@@ -178,9 +178,7 @@ async def EmbeddDoc(index_name: str, extracted_data):
             embedding=embeddings
         )
         await BatchUpload(extracted_data, vector_store)
-        
-# Delete Knowledge Base toolkit
-from fastapi import HTTPException
+    
 
 # Delete Knowledge Base toolkit
 async def DeleteIndex(index_name: str, doc_id: str):
@@ -189,19 +187,7 @@ async def DeleteIndex(index_name: str, doc_id: str):
         embedding=embeddings
     )
     if DoesIndexExist(index_name):
-        # Check if the doc_id exists
-        results = vectorstore._index.query(
-            top_k=1,
-            filter={"doc_id": {"$eq": doc_id}},
-            include_values=False
-        )
-
-        if not results.get("matches"):  # No match found
-            raise HTTPException(status_code=404, detail=f"Document ID '{doc_id}' not found in index '{index_name}'")
-
-        # Proceed with deletion
-        vectorstore.delete(filter={"doc_id": {"$eq": doc_id}})
+        vectorstore.delete(filter={"doc_id":{"$eq": doc_id}})
         logger.info(f"Document '{doc_id}' deleted successfully from index '{index_name}'.")
     else:
         logger.warning(f"Index '{index_name}' does not exist. Cannot delete.")
-        raise HTTPException(status_code=404, detail=f"Index '{index_name}' does not exist.")
