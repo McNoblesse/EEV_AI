@@ -43,8 +43,8 @@ async def chat_agent_endpoint(
     except Exception as e:
         logger.error(f"Error in chat agent endpoint: {e}")
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Internal server error"
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Index name does not exist."
         )
     finally:
         data = await GenerateDataFromUserQuery(payload.user_query)
