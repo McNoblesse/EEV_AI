@@ -24,4 +24,7 @@ def CategorizeChatFunc(category:list[str]):
 
 class ConversationLogClassification(BaseModel):
     chat_log: Literal["conversation_ended", "conversation_not_ended"] = Field(..., description="Indicates whether the conversation has ended or not")
+    
+class ConversationSentimentClassification(BaseModel):
+    sentiment: Literal["positive", "negative", "neutral"] = Field(..., description="Sentiment classification of the conversation")
 

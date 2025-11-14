@@ -28,3 +28,7 @@ class ConversationCategoryResponse(BaseModel):
 class ConversationClassifyResponse(BaseModel):
     session_id: Annotated[str, Body(..., description="User's session ID.")]
     is_chat_end: Annotated[bool, Body(..., description="Indicates if the chat has ended.")]
+    
+class ChatSentimentClassification(BaseModel):
+    session_id: Annotated[str, Body(..., description="User's session ID.")]
+    sentiment: Annotated[str, Body(..., description="Sentiment assigned to the chat.")]

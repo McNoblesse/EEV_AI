@@ -11,8 +11,10 @@ from langchain_community.document_loaders.parsers import LLMImageBlobParser
 from langchain_google_genai import ChatGoogleGenerativeAI
 
 from app.api.logger.api_logs import logger
-from app.schemas.agent_schemas import UserQueryAnalysisSchema
-from app.schemas.agent_schemas import CategorizeChatFunc, ConversationLogClassification
+from app.schemas.agent_schemas import (CategorizeChatFunc,
+                                       UserQueryAnalysisSchema, 
+                                       ConversationSentimentClassification, 
+                                       ConversationLogClassification)
 
 import os
 from app.eev_configurations.config import settings
@@ -220,3 +222,14 @@ async def ClassifyConversationLog(chat_log: str):
     classification_chain = prompt | classification_llm.with_structured_output(ConversationLogClassification)
     return await classification_chain.ainvoke({"chat_log": chat_log})
 
+
+# Chat sentiment classification toolkit
+async def ChatSentimentClassifier(Chatlog: str): 
+    sentiment_llm = ChatOpenAI(model="gpt-5-mini")
+    prompt = ChatPromptTemplate.from_template("""
+    You are an intelligent sentiment classifier. 
+    Analyze the following chat log and classify the overall sentiment as positive, negative, or neutral.
+    Chat Log: {chatlog}
+    """)                        
+    sentiment_chain = prompt | sentiment_llm.with_structured_output(ConversationSentimentClassification)
+    return await sentiment_chain.ainvoke({"chatlog": Chatlog})
