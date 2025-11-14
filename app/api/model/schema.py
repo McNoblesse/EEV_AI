@@ -17,3 +17,14 @@ class DeleteKnowledgeBaseResponse(BaseModel):
 
 class CreateKnowledgeBaseResponse(BaseModel):
     results: list[dict]
+    
+class ConversationCategoryPayload(BaseModel):
+    session_id: Annotated[str, Body(..., description="User's session ID.")]
+    
+class ConversationCategoryResponse(BaseModel):
+    session_id: Annotated[str, Body(..., description="User's session ID.")]
+    category: Annotated[str, Body(..., description="Category assigned to the chat.")]
+    
+class ConversationClassifyResponse(BaseModel):
+    session_id: Annotated[str, Body(..., description="User's session ID.")]
+    is_chat_end: Annotated[bool, Body(..., description="Indicates if the chat has ended.")]

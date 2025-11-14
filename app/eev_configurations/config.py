@@ -8,6 +8,13 @@ class Settings(BaseSettings):
         extra="ignore",
     )
     
+    # model_config = SettingsConfigDict(
+    #     env_file="../.env",
+    #     case_sensitive=False,
+    #     env_file_encoding="utf-8",
+    #     extra="ignore",
+    # )
+    
     OPENAI_API_KEY:str
     PINECONE_API_KEY:str
     GEMINI_API_KEY:str

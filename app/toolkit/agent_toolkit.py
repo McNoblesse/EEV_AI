@@ -1,12 +1,9 @@
 from uuid import uuid4
-from io import BytesIO
-from typing import Dict
-from openai import AsyncOpenAI
+import resend, asyncio, tempfile
 from langchain_openai import ChatOpenAI
 from langchain.chains import RetrievalQA
 from pinecone import Pinecone, ServerlessSpec
 from langchain_openai import OpenAIEmbeddings
-import httpx, resend, asyncio, tempfile, base64
 from langchain_community.document_loaders import PyMuPDFLoader
 from langchain_pinecone.vectorstores import PineconeVectorStore
 from langchain_core.prompts import PromptTemplate, ChatPromptTemplate
@@ -15,6 +12,7 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 
 from app.api.logger.api_logs import logger
 from app.schemas.agent_schemas import UserQueryAnalysisSchema
+from app.schemas.agent_schemas import CategorizeChatFunc, ConversationLogClassification
 
 import os
 from app.eev_configurations.config import settings
@@ -22,8 +20,6 @@ resend.api_key = settings.RESEND_API
 os.environ["GOOGLE_API_KEY"] = settings.GEMINI_API_KEY
 os.environ["PINECONE_API_KEY"] = settings.PINECONE_API_KEY
 os.environ["OPENAI_API_KEY"] = settings.OPENAI_API_KEY
-
-client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
 
 # Send email tooklit
 def SendEmail(from_email, to_email, subject, html):
@@ -191,3 +187,46 @@ async def DeleteIndex(index_name: str, doc_id: str):
         logger.info(f"Document '{doc_id}' deleted successfully from index '{index_name}'.")
     else:
         logger.warning(f"Index '{index_name}' does not exist. Cannot delete.")
+        
+# Categorize Chat toolkit
+async def CategorizeChat(category:list[str], Chatlog: str):
+    CategorizeChat = CategorizeChatFunc(category)  
+    categorization_llm = ChatOpenAI(model="gpt-5-mini")
+    prompt = ChatPromptTemplate.from_template("""
+    You are an intelligent chat categorizer. 
+    Analyze the following user query and assign the most appropriate category from the provided list.
+    
+    User Query: {question}
+    """)
+    categorization_chain = prompt | categorization_llm.with_structured_output(CategorizeChat)
+    return await categorization_chain.ainvoke({"question": Chatlog})
+
+# Classifiy Conversation Log toolkit
+async def ClassifyConversationLog(chat_log: str):
+    classification_llm = ChatOpenAI(model="gpt-5-mini")
+    prompt = ChatPromptTemplate.from_template("""
+    You are an intelligent classifier. 
+    Analyze the following chat log with timestamps and determine if the conversation has ended or not.
+    
+    Consider these indicators:
+    - Explicit goodbye messages (bye, goodbye, see you, talk later, etc.)
+    - Natural conversation closures (thanks + acknowledgment, problem resolved)
+    - Topic resolution followed by no new questions
+    - Time gaps between messages (long silences may indicate conversation end)
+    - Message frequency patterns (slowing down, one-word responses)
+    - Time of day (late night messages followed by long gap might be natural sleep)
+    - Last message sentiment and completeness
+    
+    Pay special attention to:
+    - How much time has passed since the last message
+    - Whether the last message feels like a natural endpoint
+    - The overall conversation flow and rhythm
+    
+    Chat Log with Timestamps:
+    {chat_log}
+    
+    Provide your classification with clear reasoning, including temporal analysis.
+    """)
+    classification_chain = prompt | classification_llm.with_structured_output(ConversationLogClassification)
+    return await classification_chain.ainvoke({"chat_log": chat_log})
+
