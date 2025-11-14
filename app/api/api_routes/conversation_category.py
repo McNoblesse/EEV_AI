@@ -7,6 +7,7 @@ from app.api.auth.api_auth import endpoint_auth
 from app.eev_configurations.config import settings
 from app.toolkit.agent_toolkit import CategorizeChat
 from app.memory.load_conversation import LoadConversations
+from app.toolkit.agent_toolkit import ChatSentimentClassifier
 from app.api.model.schema import ConversationCategoryPayload, ConversationCategoryResponse
 
 
@@ -41,7 +42,11 @@ async def get_conversation_categories(
     logger.info(f"Fetching conversation categories for session_id: {payload.session_id}")
     categories = await CategorizeChat(category=categories, Chatlog=chatlog)
     
+    logger.info(f"Fetching conversation sentiment for session_id: {payload.session_id}")
+    sentiment = await ChatSentimentClassifier(Chatlog=chatlog)
+    
     return ConversationCategoryResponse(
         session_id=payload.session_id,
-        category=categories.chat_category
+        category=categories.chat_category,
+        sentiment=sentiment.sentiment
     )
