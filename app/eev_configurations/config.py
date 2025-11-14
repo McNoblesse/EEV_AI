@@ -19,7 +19,6 @@ class Settings(BaseSettings):
     PINECONE_API_KEY:str
     GEMINI_API_KEY:str
     MEMORY_DB:str
-    RESEND_API:str
     OPENAI_EMBEDDING_NAME:str
     PINECONE_CLOUD:str
     PINECONE_REGION:str

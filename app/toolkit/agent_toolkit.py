@@ -1,5 +1,5 @@
 from uuid import uuid4
-import resend, asyncio, tempfile
+import asyncio, tempfile
 from langchain_openai import ChatOpenAI
 from langchain.chains import RetrievalQA
 from pinecone import Pinecone, ServerlessSpec
@@ -16,19 +16,9 @@ from app.schemas.agent_schemas import CategorizeChatFunc, ConversationLogClassif
 
 import os
 from app.eev_configurations.config import settings
-resend.api_key = settings.RESEND_API
 os.environ["GOOGLE_API_KEY"] = settings.GEMINI_API_KEY
 os.environ["PINECONE_API_KEY"] = settings.PINECONE_API_KEY
 os.environ["OPENAI_API_KEY"] = settings.OPENAI_API_KEY
-
-# Send email tooklit
-def SendEmail(from_email, to_email, subject, html):
-    r = resend.Emails.send({
-      "from": from_email,
-      "to": to_email,
-      "subject":subject,
-      "html": html
-    })
 
 embeddings = OpenAIEmbeddings(model=settings.OPENAI_EMBEDDING_NAME)
 

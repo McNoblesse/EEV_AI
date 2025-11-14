@@ -8,10 +8,6 @@ class AgentSchema(TypedDict):
     chat_history:str
     index_name:str
     agent_used:Literal["tier_1", "tier_2", "conversation"]
-
-class EmailSummaryAgentSchema(BaseModel):
-    subject: str = Field(..., description="Brief email subject line summarizing the escalated issue")
-    html: str = Field(..., description="HTML-formatted email body containing the structured summary for human agents")
     
 class RouterSchema(BaseModel):
     route:Literal["tier_1", "tier_2", "conversation"] = Field(..., description="Designated route for handling the user query")
