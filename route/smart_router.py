@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from typing import Annotated
 import logging
 
-from security.authentication import get_client_context
+from security.authentication import get_client_context, build_namespace
 from model.schema import RequestPayload, PayloadResponse
 from config.database import get_db
 from utils.complexity_analyzer import complexity_analyzer
@@ -32,7 +32,9 @@ async def auto_route_handler(
     """
     
     client_id = client["client_id"]
-    logger.info(f"Auto-routing query for client: {client['client_name']} ({client_id})")
+    category = getattr(data, 'category', None)  # ✅ EXTRACT CATEGORY
+    
+    logger.info(f"Auto-routing query for client: {client['client_name']} ({client_id}), category: {category}")
     
     try:
         # Fast complexity analysis
@@ -40,7 +42,7 @@ async def auto_route_handler(
         
         logger.info(f"Routing to {complexity_result.tier} for client {client_id} (score={complexity_result.score})")
         
-        # Route to appropriate tier (all will have client context)
+        # Route to appropriate tier (all will have client context + category)
         if complexity_result.tier == 'tier1':
             return await tier_1_handler(data, client, db)
         
@@ -52,7 +54,7 @@ async def auto_route_handler(
             elif complexity_result.score > 70:
                 return tier_3_model_handler(data, client, db)
             else:
-                return await tier_2_handler(data, client, db)
+                return await tier_2_handler(data, client, db)  # ✅ Category passed via data
         
         else:  # tier3
             return tier_3_model_handler(data, client, db)

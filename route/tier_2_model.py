@@ -14,7 +14,7 @@ from langchain_core.prompts import ChatPromptTemplate
 import logging
 from datetime import datetime
 
-from security.authentication import get_client_context
+from security.authentication import get_client_context, build_namespace
 from model.schema import RequestPayload, PayloadResponse
 from config.database import get_db
 from model.database_models import Conversation, ConversationAnalytics
@@ -30,17 +30,20 @@ llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
 @router.post("/tier_2_model", response_model=PayloadResponse)
 async def tier_2_handler(
     data: RequestPayload,
-    client: dict = Depends(get_client_context),  # ✅ INJECT CLIENT
+    client: dict = Depends(get_client_context),
     db: Session = Depends(get_db)
 ):
-    """
-    Tier 2: Moderate complexity with client-specific knowledge retrieval
-    """
+    """Tier 2: Moderate complexity with client-specific knowledge retrieval"""
     
     client_id = client["client_id"]
-    namespace = f"{client['namespace_prefix']}_{data.category if hasattr(data, 'category') else 'general'}"
     
-    logger.info(f"Tier 2 query from client: {client['client_name']} ({client_id})")
+    # ✅ EXTRACT CATEGORY FROM REQUEST
+    category = getattr(data, 'category', None)
+    
+    # ✅ BUILD NAMESPACE
+    namespace = build_namespace(client_id, category)
+    
+    logger.info(f"Tier 2 query from client: {client['client_name']} ({client_id}), category: {category}, namespace: {namespace}")
     
     start_time = datetime.now()
     
@@ -101,12 +104,15 @@ async def tier_2_handler(
         # Handle Tier 2 queries (31-70)
         logger.info(f"Processing Tier 2 query: score={complexity_result.score}")
         
-        # ✅ RETRIEVE WITH CLIENT CONTEXT
+        # ✅ RETRIEVE WITH CATEGORY
         kb_results = retriever_tool.invoke({
             "query": data.user_query,
-            "client_id": client_id,  # ✅ CLIENT-SPECIFIC
-            "namespace": namespace  # ✅ ISOLATED NAMESPACE
+            "client_id": client_id,
+            "category": category  # ✅ PASS CATEGORY
         })
+        
+        # Log what we got
+        logger.info(f"📚 Retrieved context length: {len(kb_results)} chars")
         
         # Generate response
         prompt = ChatPromptTemplate.from_messages([
@@ -114,15 +120,18 @@ async def tier_2_handler(
 
 Provide helpful, accurate responses using ONLY the knowledge base context provided.
 
-IMPORTANT: You can ONLY answer based on the knowledge base for {client['client_name']}. 
-If the information is not in the provided context, clearly state that you don't have that information in the knowledge base."""),
+IMPORTANT: 
+- You can ONLY answer based on the knowledge base for {client['client_name']}
+- If information is not in the provided context, clearly state: "I don't have that information in our knowledge base"
+- Always cite the source document when providing information
+"""),
             ("human", "Query: {query}\n\nKnowledge Base Context:\n{context}\n\nProvide response:")
         ])
         
         chain = prompt | llm
         response = await chain.ainvoke({
             "query": data.user_query,
-            "context": kb_results[:2000] if kb_results else f"No specific documentation found in {client['client_name']}'s knowledge base."
+            "context": kb_results[:3000] if kb_results else f"No documentation found in {client['client_name']}'s knowledge base."
         })
         
         ai_response = response.content
@@ -200,7 +209,7 @@ If the information is not in the provided context, clearly state that you don't 
             response=ai_response,
             intent="product_inquiry",
             intent_confidence=0.75,
-            sub_intent="moderate_complexity",
+            sub_intent=f"category_{category}" if category else "general",  # ✅ INCLUDE CATEGORY
             sentiment="neutral",
             sentiment_score=0.0,
             complexity_score=complexity_result.score,
@@ -211,7 +220,7 @@ If the information is not in the provided context, clearly state that you don't 
             escalate=should_escalate,
             conversation_summary=None,
             conversation_ended=False,
-            reasoning_steps=[complexity_result.reasoning],
+            reasoning_steps=[complexity_result.reasoning, f"Searched namespace: {namespace}"],  # ✅ ADD
             retrieved_context=[kb_results[:500]] if kb_results else [],
             tools_used=["retriever_tool"],
             processing_time_ms=processing_time

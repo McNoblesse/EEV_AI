@@ -32,9 +32,10 @@ class EntityModel(BaseModel):
     confidence: float
 
 class RequestPayload(BaseModel):
-    user_query: str = Field(..., description="The user's query or message")
+    user_query: str = Field(..., description="User's question or input")
     session_id: str = Field(..., description="Unique session identifier")
-    channel: ChannelType = Field(ChannelType.chat, description="Communication channel")
+    channel: str = Field(default="chat", description="Communication channel: chat, voice, email, whatsapp")
+    category: Optional[str] = Field(default=None, description="Document category for knowledge base lookup")  # ✅ ADD THIS
     
     # Optional fields for enhanced context
     message_history: Optional[List[Dict]] = Field(None, description="Previous messages in session")
@@ -44,10 +45,10 @@ class RequestPayload(BaseModel):
     class Config:
         schema_extra = {
             "example": {
-                "user_query": "How do I reset my password?",
+                "user_query": "Tell me about our products",
                 "session_id": "session_12345",
                 "channel": "chat",
-                "user_metadata": {"user_type": "business", "plan": "premium"}
+                "category": "Products"
             }
         }
 

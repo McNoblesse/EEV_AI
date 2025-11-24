@@ -252,3 +252,38 @@ def get_client_context(api_key: str = Security(api_key_header)) -> dict:
         raise HTTPException(status_code=403, detail="Invalid or inactive client")
     
     return client_info
+
+def build_namespace(client_id: str, category: str = None) -> str:
+    """
+    Build consistent namespace for client and category
+    
+    Args:
+        client_id: Client identifier (e.g., "default_client", "acme_corporation")
+        category: Optional category (e.g., "Products", "Support", "Manual")
+        
+    Returns:
+        Namespace string in format: client_{client_id}_{category_normalized}
+        
+    Examples:
+        build_namespace("acme_corp", "Products") -> "client_acme_corp_products"
+        build_namespace("acme_corp", None) -> "client_acme_corp"
+        build_namespace("acme_corp", "Product Guide") -> "client_acme_corp_product_guide"
+    """
+    # Start with client prefix
+    namespace = f"client_{client_id}"
+    
+    # Add category if provided
+    if category:
+        # Normalize category: lowercase, replace spaces/special chars with underscores
+        normalized_category = (
+            category.lower()
+            .replace(" ", "_")
+            .replace("-", "_")
+            .replace(".", "_")
+            .replace("(", "")
+            .replace(")", "")
+        )
+        namespace = f"{namespace}_{normalized_category}"
+    
+    logger.debug(f"Built namespace: {namespace} (client={client_id}, category={category})")
+    return namespace

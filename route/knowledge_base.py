@@ -13,7 +13,7 @@ from typing import List, Optional
 from datetime import datetime
 import logging
 
-from security.authentication import AuthenticateTier1Model, get_client_context
+from security.authentication import AuthenticateTier1Model, get_client_context, build_namespace
 from config.database import get_db
 from model.database_models import DocumentUpload
 from utils.document_processor import document_processor
@@ -36,7 +36,7 @@ async def upload_documents(
     files: List[UploadFile] = File(...),
     category: str = Form(...),
     enable_ocr: bool = Form(False),
-    client: dict = Depends(get_client_context),  # ✅ INJECT CLIENT CONTEXT
+    client: dict = Depends(get_client_context),
     db: Session = Depends(get_db)
 ):
     """
@@ -101,15 +101,15 @@ async def upload_documents(
             
             # Create database record
             doc_record = DocumentUpload(
-                client_id=client_id,  # ✅ NEW
-                client_name=client["client_name"],  # ✅ NEW
+                client_id=client_id,
+                client_name=client["client_name"],
                 filename=unique_filename,
                 original_filename=file.filename,
                 category=category,
                 file_type=file_ext,
                 file_size_bytes=file_size,
                 status="pending",
-                uploaded_by=client_id,  # ✅ CHANGED
+                uploaded_by=client_id,
                 processing_started_at=datetime.utcnow()
             )
             
@@ -125,14 +125,14 @@ async def upload_documents(
                 original_filename=file.filename,
                 category=category,
                 enable_ocr=enable_ocr,
-                client_id=client_id,  # ✅ NEW
-                namespace_prefix=namespace_prefix  # ✅ NEW
+                client_id=client_id,
+                namespace_prefix=namespace_prefix
             )
             
             uploaded_docs.append({
                 "id": doc_record.id,
                 "filename": file.filename,
-                "client_id": client_id,  # ✅ EXPOSE IN RESPONSE
+                "client_id": client_id,
                 "status": "processing"
             })
             
@@ -161,13 +161,13 @@ async def process_document_background(
     original_filename: str,
     category: str,
     enable_ocr: bool,
-    client_id: str,  # ✅ NEW
-    namespace_prefix: str  # ✅ NEW
+    client_id: str,
+    namespace_prefix: str
 ):
-    """
-    Process document with client-specific namespace isolation
-    """
+    """Process document with client-specific namespace isolation"""
     from config.database import SessionLocal
+    from security.authentication import build_namespace  # ✅ IMPORT HERE
+    
     db = SessionLocal()
     
     try:
@@ -180,7 +180,7 @@ async def process_document_background(
         db.commit()
         
         start_time = datetime.utcnow()
-        logger.info(f"Processing document {doc_id} for client {client_id}: {original_filename}")
+        logger.info(f"📄 Processing document {doc_id} for client {client_id}: {original_filename}")
         
         # Process document
         result = await document_processor.process_document(
@@ -190,22 +190,23 @@ async def process_document_background(
             enable_ocr=enable_ocr
         )
         
-        # ✅ CREATE CLIENT-SPECIFIC NAMESPACE
-        namespace = f"{namespace_prefix}_{category.lower().replace(' ', '_')}"
+        # ✅ BUILD NAMESPACE USING SAME HELPER (CRITICAL!)
+        namespace = build_namespace(client_id, category)
         
-        logger.info(f"📦 Storing in namespace: {namespace}")
+        logger.info(f"📦 Storing in namespace: {namespace} (client={client_id}, category={category})")
         
-        # ✅ STORE IN CLIENT-SPECIFIC PINECONE NAMESPACE
+        # Store in Pinecone
         vector_ids = await document_processor.store_in_vectordb(
             chunks=result["chunks"],
             metadata={
                 "filename": original_filename,
                 "category": category,
                 "doc_id": doc_id,
-                "client_id": client_id,  # ✅ ADD CLIENT ID TO METADATA
-                "client_name": doc_record.client_name
+                "client_id": client_id,
+                "client_name": doc_record.client_name,
+                "namespace": namespace
             },
-            namespace=namespace  # ✅ ISOLATED NAMESPACE
+            namespace=namespace
         )
         
         # Update record
@@ -216,7 +217,7 @@ async def process_document_background(
         doc_record.total_tokens = document_processor.estimate_tokens(result["text"])
         doc_record.text_preview = result["preview"]
         doc_record.vector_ids = vector_ids
-        doc_record.namespace = namespace  # ✅ SAVE NAMESPACE
+        doc_record.namespace = namespace  # ✅ SAVE EXACT NAMESPACE USED
         doc_record.processing_completed_at = datetime.utcnow()
         doc_record.processing_time_ms = int(processing_time)
         doc_record.required_ocr = result["metadata"].get("ocr_used", False)
@@ -225,10 +226,10 @@ async def process_document_background(
         
         db.commit()
         
-        logger.info(f"✅ Successfully processed {original_filename} for {client_id}: {result['chunk_count']} chunks in namespace {namespace}")
+        logger.info(f"✅ Successfully processed {original_filename}: {result['chunk_count']} chunks in namespace '{namespace}'")
         
     except Exception as e:
-        logger.error(f"Error processing document {doc_id}: {str(e)}", exc_info=True)
+        logger.error(f"❌ Error processing document {doc_id}: {str(e)}", exc_info=True)
         
         doc_record = db.query(DocumentUpload).filter(DocumentUpload.id == doc_id).first()
         if doc_record:
@@ -327,7 +328,7 @@ async def get_document(
         "processing_time_ms": document.processing_time_ms,
         "required_ocr": document.required_ocr,
         "ocr_confidence": document.ocr_confidence,
-        "metadata": document.doc_metadata,  # ✅ Return as "metadata" in JSON
+        "metadata": document.doc_metadata, 
         "error_message": document.error_message
     }
 
@@ -369,4 +370,47 @@ async def delete_document(
     return {
         "message": f"Document {document.original_filename} deleted successfully",
         "document_id": document_id
+    }
+
+
+@router.get("/debug/namespaces")
+async def debug_namespaces(
+    api_key: str = Depends(AuthenticateTier1Model),
+    db: Session = Depends(get_db)
+):
+    """
+    Debug endpoint to see all document namespaces
+    """
+    from sqlalchemy import distinct
+    
+    # Get all unique namespaces
+    namespaces = db.query(distinct(DocumentUpload.namespace)).all()
+    
+    # Get documents per namespace
+    namespace_details = []
+    for (ns,) in namespaces:
+        if ns:
+            docs = db.query(DocumentUpload).filter(
+                DocumentUpload.namespace == ns,
+                DocumentUpload.status == 'indexed'
+            ).all()
+            
+            namespace_details.append({
+                "namespace": ns,
+                "document_count": len(docs),
+                "documents": [
+                    {
+                        "id": doc.id,
+                        "filename": doc.original_filename,
+                        "category": doc.category,
+                        "client_id": doc.client_id,
+                        "chunks": doc.chunk_count
+                    }
+                    for doc in docs
+                ]
+            })
+    
+    return {
+        "total_namespaces": len(namespace_details),
+        "namespaces": namespace_details
     }

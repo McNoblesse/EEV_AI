@@ -10,6 +10,7 @@ import ast
 from langchain_core.tools import tool
 from fastapi_mail import FastMail, MessageSchema, ConnectionConfig
 from config.access_keys import accessKeys
+from security.authentication import build_namespace  # ✅ IMPORT
 import logging
 
 logger = logging.getLogger(__name__)
@@ -87,43 +88,76 @@ def send_mail_to_human_agent_sync(mail_input: dict) -> str:
         return f"Error sending email: {str(e)}"
 
 @tool
-def retriever_tool(query: str, client_id: str = "default_client", namespace: str = None) -> str:
+def retriever_tool(input_dict: dict) -> str:
     """
     Retrieve relevant information from client-specific knowledge base
     
     Args:
-        query: Search query
-        client_id: Client identifier for namespace isolation
-        namespace: Optional specific namespace (auto-generated if not provided)
+        input_dict: Dictionary with keys:
+            - query (str): Search query
+            - client_id (str): Client identifier for namespace isolation
+            - category (str, optional): Category to narrow search
         
     Returns:
         Retrieved information or error message
     """
+    # ✅ EXTRACT FROM DICT
+    query = input_dict.get("query", "")
+    client_id = input_dict.get("client_id", "default_client")
+    category = input_dict.get("category")  # Can be None
+    
+    # ✅ LOG EVERYTHING FOR DEBUGGING
+    logger.info("="*60)
+    logger.info("🔍 RETRIEVER TOOL CALLED")
+    logger.info(f"  Input Dict: {input_dict}")
+    logger.info(f"  Extracted Query: '{query[:50]}...'")
+    logger.info(f"  Extracted Client ID: {client_id}")
+    logger.info(f"  Extracted Category: {category}")
+    logger.info("="*60)
+    
     if not query or not query.strip():
         return "Error: Please provide a search query"
     
     try:
-        # Determine namespace
-        if not namespace:
-            namespace = f"client_{client_id}"  # Default namespace pattern
+        # ✅ BUILD NAMESPACE USING HELPER FUNCTION
+        namespace = build_namespace(client_id, category)
         
-        logger.info(f"🔍 Searching in namespace: {namespace} for client: {client_id}")
+        logger.info(f"📦 Built Namespace: {namespace}")
+        logger.info(f"   From: client_id={client_id}, category={category}")
         
-        # ✅ QUERY SPECIFIC NAMESPACE ONLY
+        logger.info(f"📦 Searching in namespace: {namespace}")
+        
+        # ✅ QUERY SPECIFIC NAMESPACE
         results = vectorstore.similarity_search(
             query.strip(), 
-            k=3,
-            namespace=namespace  # ✅ CLIENT-SPECIFIC SEARCH
+            k=5,
+            namespace=namespace,
+            filter={"client_id": client_id}
         )
         
         if not results:
-            return f"No relevant information found in your knowledge base for: '{query}'"
+            # ✅ TRY BROADER SEARCH (all categories for this client)
+            logger.info(f"⚠️ No results in '{namespace}', trying broader search...")
+            fallback_namespace = build_namespace(client_id, None)
+            
+            if fallback_namespace != namespace:  # Only try if different
+                logger.info(f"📦 Fallback namespace: {fallback_namespace}")
+                results = vectorstore.similarity_search(
+                    query.strip(), 
+                    k=5,
+                    namespace=fallback_namespace,
+                    filter={"client_id": client_id}
+                )
+            
+            if not results:
+                return f"Based on our knowledge base: No relevant information found in {client_id}'s knowledge base for: '{query}'"
         
         # Format results
         formatted_results = []
         for i, doc in enumerate(results, 1):
             text = doc.metadata.get('text', doc.page_content)
             source = doc.metadata.get('filename', 'Unknown')
+            doc_category = doc.metadata.get('category', 'Uncategorized')
             
             # ✅ VERIFY CLIENT ID IN METADATA (EXTRA SAFETY)
             doc_client = doc.metadata.get('client_id')
@@ -134,15 +168,17 @@ def retriever_tool(query: str, client_id: str = "default_client", namespace: str
             if len(text) > 500:
                 text = text[:500] + "..."
                 
-            formatted_results.append(f"Result {i} (Source: {source}): {text}")
+            formatted_results.append(
+                f"📄 Result {i} (Source: {source}, Category: {doc_category}):\n{text}"
+            )
         
         if not formatted_results:
-            return "No relevant information found in your knowledge base"
+            return f"Based on our knowledge base: No relevant information found in {client_id}'s knowledge base"
         
         return "\n\n".join(formatted_results)
         
     except Exception as e:
-        logger.error(f"Retrieval error for client {client_id}: {str(e)}", exc_info=True)
+        logger.error(f"❌ Retrieval error for client {client_id}: {str(e)}", exc_info=True)
         return f"I encountered an error searching the knowledge base: {str(e)}"
 
 @tool
