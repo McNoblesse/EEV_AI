@@ -1,6 +1,7 @@
 from fastapi import Body
 from typing import Annotated
 from pydantic import BaseModel
+from typing import Optional
 
 class ChatAgentPayload(BaseModel):
     user_query: Annotated[str, Body(..., description="User's current query.")]
@@ -11,6 +12,7 @@ class ChatAgentResponse(BaseModel):
     bot_response: str
     session_id: str
     is_escalated: bool
+    summary: Optional[str] = None
     
 class DeleteKnowledgeBaseResponse(BaseModel):
     message: str

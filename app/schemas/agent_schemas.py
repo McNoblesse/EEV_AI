@@ -1,5 +1,5 @@
 from enum import Enum
-from typing import TypedDict, Literal
+from typing import TypedDict, Literal, NotRequired
 from pydantic import BaseModel, Field
 
 class AgentSchema(TypedDict):
@@ -9,6 +9,7 @@ class AgentSchema(TypedDict):
     index_name:str
     agent_used:Literal["tier_1", "tier_2", "conversation"]
     session_id: str
+    summary: NotRequired[str]
     
 class RouterSchema(BaseModel):
     route:Literal["tier_1", "tier_2", "conversation"] = Field(..., description="Designated route for handling the user query")

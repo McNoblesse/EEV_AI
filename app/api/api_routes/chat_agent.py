@@ -39,7 +39,9 @@ async def chat_agent_endpoint(
     try:
         return ChatAgentResponse(bot_response=bot_response['bot_response'],
                                  session_id=payload.session_id,
-                                 is_escalated=True if bot_response["agent_used"] == "tier_2" else False)
+                                 is_escalated=True if bot_response["agent_used"] == "tier_2" else False,
+                                 summary=bot_response.get("summary", None)
+                                 )
     except Exception as e:
         logger.error(f"Error in chat agent endpoint: {e}")
         raise HTTPException(
