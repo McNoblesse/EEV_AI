@@ -8,6 +8,7 @@ class AgentSchema(TypedDict):
     chat_history:str
     index_name:str
     agent_used:Literal["tier_1", "tier_2", "conversation"]
+    session_id: str
     
 class RouterSchema(BaseModel):
     route:Literal["tier_1", "tier_2", "conversation"] = Field(..., description="Designated route for handling the user query")

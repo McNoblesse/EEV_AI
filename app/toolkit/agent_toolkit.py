@@ -179,6 +179,30 @@ async def DeleteIndex(index_name: str, doc_id: str):
         logger.info(f"Document '{doc_id}' deleted successfully from index '{index_name}'.")
     else:
         logger.warning(f"Index '{index_name}' does not exist. Cannot delete.")
+
+
+# A) Delete docs by doc_id from an index
+async def DeleteDocsFromIndex(index_name: str, doc_id: str):
+    if not DoesIndexExist(index_name):
+        logger.warning(f"Index '{index_name}' does not exist. Cannot delete docs.")
+        return
+
+    vectorstore = PineconeVectorStore.from_existing_index(
+        index_name=index_name,
+        embedding=embeddings
+    )
+    vectorstore.delete(filter={"doc_id": {"$eq": doc_id.lower()}})
+    logger.info(f"Document '{doc_id}' deleted successfully from index '{index_name}'.")
+
+
+# B) Drop the entire index
+async def DropIndex(index_name: str):
+    if DoesIndexExist(index_name):
+        pc.delete_index(index_name)
+        logger.info(f"Index '{index_name}' deleted successfully.")
+    else:
+        logger.warning(f"Index '{index_name}' does not exist. Cannot delete.")
+
         
 # Categorize Chat toolkit
 async def CategorizeChat(category:list[str], Chatlog: str):
