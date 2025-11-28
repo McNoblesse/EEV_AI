@@ -10,6 +10,9 @@ os.environ["OPENAI_API_KEY"] = settings.OPENAI_API_KEY
 def AgentRouter(state:AgentSchema):
     route_llm = ChatOpenAI(model="gpt-4o-mini")
     
+    if state.get("force_escalation"):
+        return "tier_2"
+    
     prompt = ChatPromptTemplate.from_messages([
         ("system", """You are an intelligent routing system for eevAI, a customer service chatbot. 
 Your job is to analyze the user's intent and route to the appropriate handler.

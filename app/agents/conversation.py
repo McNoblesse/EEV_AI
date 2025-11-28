@@ -4,8 +4,10 @@ from langchain_core.prompts import ChatPromptTemplate
 
 def ConversationAgent(state:AgentSchema):
     conversation_llm = ChatOpenAI(model="gpt-5-mini")
+    agent_name = state.get("agent_name") or "eevAI"
+
     conversation_prompt = ChatPromptTemplate.from_messages([
-    ("system", """You are eevAI, a helpful and friendly customer care agent. 
+    ("system", f"""You are {agent_name}, a helpful and friendly customer care agent. 
 Your role is to provide excellent customer service through natural, empathetic conversation.
 
 **YOUR PERSONALITY:**
@@ -45,10 +47,10 @@ You can provide information and guidance, but you CANNOT:
 - Make changes to billing or subscriptions
 - Access secure account information
 
-Chat history: {history}
-User message: {query}
+Chat history: {{history}}
+User message: {{query}}
 
-Respond as eevAI - be helpful, professional, and customer-focused."""),
+Respond as {agent_name} - be helpful, professional, and customer-focused."""),
     ("user", "{query}")
 ])
     conversation_chain = conversation_prompt | conversation_llm

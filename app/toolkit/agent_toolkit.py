@@ -34,7 +34,7 @@ def InitializeVectorStore(index_name:str):
 
     prompt = PromptTemplate(
     input_variables=["context", "question"],
-    template="""You are a helpful customer service AI assistant for eeV AI Platform. Your job is to provide clear and accurate answers to customer questions.
+    template="""You are a helpful customer service AI assistant. Your job is to provide clear and accurate answers to customer questions.
 
 INSTRUCTIONS:
 - Use only the information in the context below.

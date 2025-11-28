@@ -10,6 +10,8 @@ class AgentSchema(TypedDict):
     agent_used:Literal["tier_1", "tier_2", "conversation"]
     session_id: str
     summary: NotRequired[str]
+    agent_name: NotRequired[str]
+    force_escalation: NotRequired[bool]
     
 class RouterSchema(BaseModel):
     route:Literal["tier_1", "tier_2", "conversation"] = Field(..., description="Designated route for handling the user query")
