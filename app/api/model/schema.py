@@ -8,7 +8,7 @@ class ChatAgentPayload(BaseModel):
     session_id: Annotated[str, Body(..., description="User's session ID.")]
     index_name: Annotated[str, Body(..., description="Name of the Pinecone index to use for retrieval.")]
     agent_name: Optional[str] = Field(default=None)
-    confidence_level: Optional[float] = Field(default=None, ge=0, le=90)
+    confidence_level: Optional[float] = Field(default=None, ge=0, le=80)
 
 class ChatAgentResponse(BaseModel):
     bot_response: str
