@@ -16,3 +16,6 @@ app.include_router(conversation_end_check.router)
 @app.get("/")
 async def root():
     return {"message": "Welcome to the eeV-AI Bot API"}
+
+## To run the app, use the command:
+## uvicorn app.main:app --reload
