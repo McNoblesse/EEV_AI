@@ -190,13 +190,15 @@ eev-ai/
 
 # ⚡ Installation
 
-## 1. Clone the repository
+##  Clone the repository
 
 ```bash
 git clone https://github.com/yourusername/eev-ai.git
 cd eev-ai
+```
+---
 
-🔌 API Example
+#🔌 API Example
 Endpoint
 POST /chat-agent/eev-voice-rag
 Request Example
@@ -209,51 +211,60 @@ Response Example
 {
   "bot_response": "To reset your password, open the banking app and follow the forgot password process."
 }
-📊 Performance Optimizations
+
+---
+
+# 📊 Performance Optimizations
 
 EEV AI includes several optimizations:
 
-Cached vector retrieval
+- Cached vector retrieval
 
-Streaming LLM responses
+- Streaming LLM responses
 
-Asynchronous document ingestion
+- Asynchronous document ingestion
 
-HTTP connection pooling
+- HTTP connection pooling
 
-Low-latency voice pipeline
+- Low-latency voice pipeline
 
 These ensure fast real-time responses during phone calls.
 
-🔐 Security
+---
+
+# 🔐 Security
 
 The platform follows secure AI deployment practices:
 
-API authentication
+- API authentication
 
-Controlled document ingestion
+- Controlled document ingestion
 
-Secure vector database access
+- Secure vector database access
 
-Prompt injection protection
+- Prompt injection protection
 
-Data privacy compliance
+- Data privacy compliance
 
-🧪 Future Roadmap
+---
+
+# 🧪 Future Roadmap
 
 Planned improvements include:
 
-Multi-language voice support
+- Multi-language voice support
 
-African-accent voice models
+- African-accent voice models
 
-Agent reasoning workflows
+- Agent reasoning workflows
 
-Knowledge graph integration
+- Knowledge graph integration
 
-Advanced document extraction pipelines
+- Advanced document extraction pipelines
 
-👨‍💻 Author
+---
+
+# 👨‍💻 Author
 
 Joshua
 
@@ -261,15 +272,16 @@ AI Engineer | Data Scientist
 
 Areas of interest:
 
-Generative AI systems
+- Generative AI systems
 
-Voice AI agents
+- Voice AI agents
 
-Intelligent document processing
+- Intelligent document processing
 
-Enterprise AI automation
+- Enterprise AI automation
 
-⭐ Support
+
+# ⭐ Support
 
 If you find this project useful:
 
