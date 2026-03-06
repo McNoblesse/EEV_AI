@@ -1,47 +1,43 @@
 🚀 EEV AI
 Voice-Enabled Generative AI Assistant for Intelligent Document Search & Customer Support
 <p align="center">
-
-
-
-
-
-
-
-
-
-
-
-
 </p>
 
 EEV AI is a voice-enabled Generative AI platform that transforms enterprise documents into an intelligent conversational assistant.
 
 It combines LLMs, Retrieval Augmented Generation (RAG), vector search, and real-time voice agents to deliver fast, grounded answers from organizational knowledge bases.
 
-The system supports both chat and voice interactions, making it suitable for banks, enterprise knowledge systems, document automation, and AI call centers.
+The system supports both chat and voice interactions, making it suitable for:
+
+- Banks
+
+- Enterprise knowledge systems
+
+- Document automation platforms
+
+- AI customer support systems
 
 🎬 Demo
 Voice AI Call Flow
 Caller
-   ↓
+  ↓
 Speech Recognition (Deepgram)
-   ↓
+  ↓
 LiveKit Voice Agent
-   ↓
+  ↓
 GenAI RAG Pipeline
-   ↓
+  ↓
 Knowledge Retrieval (Pinecone)
-   ↓
+  ↓
 LLM Reasoning
-   ↓
+  ↓
 Voice Response (TTS)
 
 Example query:
 
 “How do I reset my online banking password?”
 
-Response:
+Example response:
 
 “To reset your password, open the banking app, select forgot password, and follow the verification steps using your registered phone number.”
 
@@ -54,11 +50,11 @@ Context-aware conversational responses
 
 Multi-agent architecture
 
-Prompt-optimized responses for voice interactions
+Prompt-optimized responses for voice interaction
 
 📄 Intelligent Document Processing
 
-Extracts knowledge from:
+EEV AI extracts knowledge from:
 
 PDFs
 
@@ -88,59 +84,61 @@ Final Response
 
 Benefits:
 
-✔ Accurate answers
-✔ Reduced hallucination
-✔ Enterprise knowledge grounding
+Accurate answers
+
+Reduced hallucination
+
+Enterprise knowledge grounding
 
 🎙 Real-Time Voice AI
 
 EEV integrates LiveKit Voice Agents with streaming responses.
 
-Features:
+Capabilities:
 
 Real-time speech recognition
 
 AI voice assistant
 
-low-latency streaming responses
+Low-latency streaming responses
 
-phone call integration
+Phone call integration
 
-conversational AI workflows
+Conversational AI workflows
 
 🧠 System Architecture
-                    ┌──────────────────────────┐
-                    │        User Query        │
-                    └────────────┬─────────────┘
-                                 │
-                         Speech / Text
-                                 │
-                     ┌───────────▼───────────┐
-                     │   Voice / Chat Agent  │
-                     │       (LiveKit)       │
-                     └───────────┬───────────┘
-                                 │
-                        Query Processing
-                                 │
-                     ┌───────────▼───────────┐
-                     │   RAG Pipeline        │
-                     │ (LangChain + LLM)     │
-                     └───────────┬───────────┘
-                                 │
-                       Semantic Retrieval
-                                 │
-                        ┌────────▼─────────┐
-                        │ Pinecone Vector  │
-                        │      Database    │
-                        └────────┬─────────┘
-                                 │
-                        Relevant Documents
-                                 │
-                     ┌───────────▼───────────┐
-                     │      LLM Response     │
-                     └───────────┬───────────┘
-                                 │
-                         Voice / Text Output
+                   ┌─────────────────────────┐
+                   │        User Query       │
+                   └───────────┬─────────────┘
+                               │
+                        Speech / Text
+                               │
+                 ┌─────────────▼─────────────┐
+                 │      Voice / Chat Agent   │
+                 │          LiveKit          │
+                 └─────────────┬─────────────┘
+                               │
+                       Query Processing
+                               │
+                 ┌─────────────▼─────────────┐
+                 │        RAG Pipeline       │
+                 │      LangChain + LLM      │
+                 └─────────────┬─────────────┘
+                               │
+                     Semantic Retrieval
+                               │
+                     ┌─────────▼─────────┐
+                     │  Pinecone Vector  │
+                     │     Database      │
+                     └─────────┬─────────┘
+                               │
+                     Relevant Documents
+                               │
+                 ┌─────────────▼─────────────┐
+                 │        LLM Response       │
+                 └─────────────┬─────────────┘
+                               │
+                        Voice / Text Output
 🛠 Technology Stack
 Component	Technology
 Backend	FastAPI
@@ -177,28 +175,28 @@ eev-ai/
 ├── requirements.txt
 └── README.md
 ⚡ Installation
-1️⃣ Clone the repository
+1. Clone the repository
 git clone https://github.com/yourusername/eev-ai.git
 cd eev-ai
-2️⃣ Install dependencies
+2. Install dependencies
 pip install -r requirements.txt
-3️⃣ Configure environment variables
+3. Configure environment variables
 
-Create .env
+Create a .env file:
 
 OPENAI_API_KEY=
 PINECONE_API_KEY=
 LIVEKIT_URL=
 EEV_BACKEND_API_KEY=
-4️⃣ Start the API
+4. Start the API server
 python run.py
-5️⃣ Start the voice agent
+5. Start the voice agent
 python app/voice_agent_app/telephony_agent.py
 🔌 API Example
-Query Endpoint
+Endpoint
 POST /chat-agent/eev-voice-rag
 
-Request:
+Request example:
 
 {
   "user_query": "How can I reset my password?",
@@ -206,7 +204,7 @@ Request:
   "index_name": "bank-docs"
 }
 
-Response:
+Response example:
 
 {
   "bot_response": "To reset your password, open the banking app and follow the forgot password process."
@@ -215,11 +213,15 @@ Response:
 
 EEV AI includes several optimizations:
 
-✔ Cached vector retrieval
-✔ Streaming LLM responses
-✔ Asynchronous document ingestion
-✔ HTTP connection pooling
-✔ Low-latency voice pipeline
+Cached vector retrieval
+
+Streaming LLM responses
+
+Asynchronous document ingestion
+
+HTTP connection pooling
+
+Low-latency voice pipeline
 
 These ensure fast real-time responses during phone calls.
 
@@ -231,32 +233,33 @@ API authentication
 
 Controlled document ingestion
 
-secure vector database access
+Secure vector database access
 
-prompt injection protection
+Prompt injection protection
 
-data privacy compliance
+Data privacy compliance
 
 🧪 Future Roadmap
 
-Planned improvements:
+Planned improvements include:
 
 Multi-language voice support
 
 African-accent voice models
 
-agent reasoning workflows
+Agent reasoning workflows
 
-knowledge graph integration
+Knowledge graph integration
 
-advanced document extraction pipelines
+Advanced document extraction pipelines
 
 👨‍💻 Author
+
 Joshua
 
 AI Engineer | Data Scientist
 
-Interested in:
+Areas of interest:
 
 Generative AI systems
 
@@ -266,20 +269,10 @@ Intelligent document processing
 
 Enterprise AI automation
 
-⭐ Support the Project
+⭐ Support
 
 If you find this project useful:
 
 ⭐ Star the repository
 ⭐ Share it
 ⭐ Contribute improvements
-
-🤝 Contributing
-
-Contributions are welcome.
-
-Fork the repository
-
-Create a feature branch
-
-Submit a pull request
