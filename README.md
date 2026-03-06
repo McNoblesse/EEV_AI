@@ -1,211 +1,211 @@
-🚀 EEV AI
-Voice-Enabled Generative AI Assistant for Intelligent Document Search & Customer Support
-<p align="center">
-</p>
+# 🚀 EEV AI
+### Voice-Enabled Generative AI Assistant for Intelligent Document Search & Customer Support
 
-EEV AI is a voice-enabled Generative AI platform that transforms enterprise documents into an intelligent conversational assistant.
+EEV AI is a **voice-enabled Generative AI platform** that transforms enterprise documents into an intelligent conversational assistant.
 
-It combines LLMs, Retrieval Augmented Generation (RAG), vector search, and real-time voice agents to deliver fast, grounded answers from organizational knowledge bases.
+It combines **LLMs, Retrieval Augmented Generation (RAG), vector search, and real-time voice agents** to deliver fast, grounded answers from organizational knowledge bases.
 
-The system supports both chat and voice interactions, making it suitable for:
+The system supports both **chat and voice interactions**, making it suitable for:
 
 - Banks
-
 - Enterprise knowledge systems
-
 - Document automation platforms
-
 - AI customer support systems
 
-🎬 Demo
-Voice AI Call Flow
+---
+
+# 🎬 Demo
+
+## Voice AI Call Flow
 Caller
-  ↓
+↓
 Speech Recognition (Deepgram)
-  ↓
+↓
 LiveKit Voice Agent
-  ↓
+↓
 GenAI RAG Pipeline
-  ↓
+↓
 Knowledge Retrieval (Pinecone)
-  ↓
+↓
 LLM Reasoning
-  ↓
+↓
 Voice Response (TTS)
 
-Example query:
 
-“How do I reset my online banking password?”
+### Example Query
 
-Example response:
+> “How do I reset my online banking password?”
 
-“To reset your password, open the banking app, select forgot password, and follow the verification steps using your registered phone number.”
+### Example Response
 
-✨ Key Features
-🤖 Generative AI Assistant
+> “To reset your password, open the banking app, select forgot password, and follow the verification steps using your registered phone number.”
 
-Powered by OpenAI LLMs
+---
 
-Context-aware conversational responses
+# ✨ Key Features
 
-Multi-agent architecture
+## 🤖 Generative AI Assistant
 
-Prompt-optimized responses for voice interaction
+- Powered by OpenAI LLMs  
+- Context-aware conversational responses  
+- Multi-agent architecture  
+- Prompt-optimized responses for voice interaction  
 
-📄 Intelligent Document Processing
+---
+
+## 📄 Intelligent Document Processing
 
 EEV AI extracts knowledge from:
 
-PDFs
+- PDFs  
+- JSON documents  
+- Text files  
+- Enterprise datasets  
 
-JSON documents
+All documents are converted into **vector embeddings** for semantic search.
 
-Text files
+---
 
-Enterprise datasets
+## 🔎 Retrieval Augmented Generation (RAG)
 
-All documents are converted into vector embeddings for semantic search.
-
-🔎 Retrieval Augmented Generation (RAG)
-
-EEV AI uses a RAG architecture to ensure responses are grounded in real data.
+EEV AI uses a **RAG architecture** to ensure responses are grounded in real data.
 
 User Query
-   ↓
+↓
 Embedding
-   ↓
+↓
 Vector Search
-   ↓
+↓
 Relevant Documents
-   ↓
+↓
 LLM Reasoning
-   ↓
+↓
 Final Response
 
-Benefits:
 
-Accurate answers
+### Benefits
 
-Reduced hallucination
+- Accurate answers  
+- Reduced hallucination  
+- Enterprise knowledge grounding  
 
-Enterprise knowledge grounding
+---
 
-🎙 Real-Time Voice AI
+## 🎙 Real-Time Voice AI
 
-EEV integrates LiveKit Voice Agents with streaming responses.
+EEV integrates **LiveKit Voice Agents** with streaming responses.
 
-Capabilities:
+Capabilities include:
 
-Real-time speech recognition
+- Real-time speech recognition  
+- AI voice assistant  
+- Low-latency streaming responses  
+- Phone call integration  
+- Conversational AI workflows  
 
-AI voice assistant
+---
 
-Low-latency streaming responses
+# 🧠 System Architecture
 
-Phone call integration
+               ┌─────────────────────────┐
+               │        User Query       │
+               └───────────┬─────────────┘
+                           │
+                    Speech / Text
+                           │
+             ┌─────────────▼─────────────┐
+             │      Voice / Chat Agent   │
+             │          LiveKit          │
+             └─────────────┬─────────────┘
+                           │
+                   Query Processing
+                           │
+             ┌─────────────▼─────────────┐
+             │        RAG Pipeline       │
+             │      LangChain + LLM      │
+             └─────────────┬─────────────┘
+                           │
+                 Semantic Retrieval
+                           │
+                 ┌─────────▼─────────┐
+                 │  Pinecone Vector  │
+                 │     Database      │
+                 └─────────┬─────────┘
+                           │
+                 Relevant Documents
+                           │
+             ┌─────────────▼─────────────┐
+             │        LLM Response       │
+             └─────────────┬─────────────┘
+                           │
+                    Voice / Text Output
 
-Conversational AI workflows
 
-🧠 System Architecture
-                   ┌─────────────────────────┐
-                   │        User Query       │
-                   └───────────┬─────────────┘
-                               │
-                        Speech / Text
-                               │
-                 ┌─────────────▼─────────────┐
-                 │      Voice / Chat Agent   │
-                 │          LiveKit          │
-                 └─────────────┬─────────────┘
-                               │
-                       Query Processing
-                               │
-                 ┌─────────────▼─────────────┐
-                 │        RAG Pipeline       │
-                 │      LangChain + LLM      │
-                 └─────────────┬─────────────┘
-                               │
-                     Semantic Retrieval
-                               │
-                     ┌─────────▼─────────┐
-                     │  Pinecone Vector  │
-                     │     Database      │
-                     └─────────┬─────────┘
-                               │
-                     Relevant Documents
-                               │
-                 ┌─────────────▼─────────────┐
-                 │        LLM Response       │
-                 └─────────────┬─────────────┘
-                               │
-                        Voice / Text Output
-🛠 Technology Stack
-Component	Technology
-Backend	FastAPI
-LLM	OpenAI
-Vector Database	Pinecone
-Embeddings	OpenAI Embeddings
-AI Framework	LangChain
-Voice Infrastructure	LiveKit
-Speech Recognition	Deepgram
-Text-to-Speech	Deepgram Aura
-Containerization	Docker
-Deployment	Cloud / VPS
-📂 Project Structure
+---
+
+# 🛠 Technology Stack
+
+| Component | Technology |
+|----------|-----------|
+| Backend | FastAPI |
+| LLM | OpenAI |
+| Vector Database | Pinecone |
+| Embeddings | OpenAI Embeddings |
+| AI Framework | LangChain |
+| Voice Infrastructure | LiveKit |
+| Speech Recognition | Deepgram |
+| Text-to-Speech | Deepgram Aura |
+| Containerization | Docker |
+| Deployment | Cloud / VPS |
+
+---
+
+# 📂 Project Structure
+
 eev-ai/
 │
 ├── app/
-│   ├── api/
-│   │   ├── routes/
-│   │   └── logger/
-│   │
-│   ├── toolkit/
-│   │   └── agent_toolkit.py
-│   │
-│   ├── voice_agent_app/
-│   │   └── telephony_agent.py
-│   │
-│   ├── schemas/
-│   │   └── agent_schemas.py
-│   │
-│   └── eev_configurations/
-│       └── config.py
+│ ├── api/
+│ │ ├── routes/
+│ │ └── logger/
+│ │
+│ ├── toolkit/
+│ │ └── agent_toolkit.py
+│ │
+│ ├── voice_agent_app/
+│ │ └── telephony_agent.py
+│ │
+│ ├── schemas/
+│ │ └── agent_schemas.py
+│ │
+│ └── eev_configurations/
+│ └── config.py
 │
 ├── docker/
 ├── requirements.txt
 └── README.md
-⚡ Installation
-1. Clone the repository
+
+
+---
+
+# ⚡ Installation
+
+## 1. Clone the repository
+
+```bash
 git clone https://github.com/yourusername/eev-ai.git
 cd eev-ai
-2. Install dependencies
-pip install -r requirements.txt
-3. Configure environment variables
 
-Create a .env file:
-
-OPENAI_API_KEY=
-PINECONE_API_KEY=
-LIVEKIT_URL=
-EEV_BACKEND_API_KEY=
-4. Start the API server
-python run.py
-5. Start the voice agent
-python app/voice_agent_app/telephony_agent.py
 🔌 API Example
 Endpoint
 POST /chat-agent/eev-voice-rag
-
-Request example:
-
+Request Example
 {
   "user_query": "How can I reset my password?",
   "session_id": "user123",
   "index_name": "bank-docs"
 }
-
-Response example:
-
+Response Example
 {
   "bot_response": "To reset your password, open the banking app and follow the forgot password process."
 }
@@ -276,3 +276,4 @@ If you find this project useful:
 ⭐ Star the repository
 ⭐ Share it
 ⭐ Contribute improvements
+
