@@ -1,141 +1,285 @@
-# eeV-AI
+🚀 EEV AI
+Voice-Enabled Generative AI Assistant for Intelligent Document Search & Customer Support
+<p align="center">
 
-eeV-AI is a conversational AI application built with FastAPI and LangChain. It provides a chatbot interface that can answer user queries by leveraging a powerful language model and retrieving information from a vector database. The project includes a FastAPI backend for the AI logic and a Gradio frontend for user interaction and testing.
 
-## Features
 
--   **Conversational AI:** Powered by OpenAI's GPT models and LangChain for robust conversational flow.
--   **RAG Pipeline:** Implements a Retrieval-Augmented Generation (RAG) pipeline using Pinecone's vector store to provide contextually relevant answers from a knowledge base.
--   **Persistent Memory:** Maintains conversation history for each user session using a SQLite database.
--   **Secure API:** The API endpoint is protected by API key authentication.
--   **Gradio Frontend:** A simple and intuitive web interface for testing and interacting with the chatbot.
 
-## Project Structure
 
-```
-.
-├── .env.example
-├── .gitignore
-├── LICENSE
-├── README.md
-├── config
-│   └── access_keys.py
-├── frontend
-│   └── gradio_app.py
-├── main.py
-├── model
-│   └── schema.py
+
+
+
+
+
+
+
+</p>
+
+EEV AI is a voice-enabled Generative AI platform that transforms enterprise documents into an intelligent conversational assistant.
+
+It combines LLMs, Retrieval Augmented Generation (RAG), vector search, and real-time voice agents to deliver fast, grounded answers from organizational knowledge bases.
+
+The system supports both chat and voice interactions, making it suitable for banks, enterprise knowledge systems, document automation, and AI call centers.
+
+🎬 Demo
+Voice AI Call Flow
+Caller
+   ↓
+Speech Recognition (Deepgram)
+   ↓
+LiveKit Voice Agent
+   ↓
+GenAI RAG Pipeline
+   ↓
+Knowledge Retrieval (Pinecone)
+   ↓
+LLM Reasoning
+   ↓
+Voice Response (TTS)
+
+Example query:
+
+“How do I reset my online banking password?”
+
+Response:
+
+“To reset your password, open the banking app, select forgot password, and follow the verification steps using your registered phone number.”
+
+✨ Key Features
+🤖 Generative AI Assistant
+
+Powered by OpenAI LLMs
+
+Context-aware conversational responses
+
+Multi-agent architecture
+
+Prompt-optimized responses for voice interactions
+
+📄 Intelligent Document Processing
+
+Extracts knowledge from:
+
+PDFs
+
+JSON documents
+
+Text files
+
+Enterprise datasets
+
+All documents are converted into vector embeddings for semantic search.
+
+🔎 Retrieval Augmented Generation (RAG)
+
+EEV AI uses a RAG architecture to ensure responses are grounded in real data.
+
+User Query
+   ↓
+Embedding
+   ↓
+Vector Search
+   ↓
+Relevant Documents
+   ↓
+LLM Reasoning
+   ↓
+Final Response
+
+Benefits:
+
+✔ Accurate answers
+✔ Reduced hallucination
+✔ Enterprise knowledge grounding
+
+🎙 Real-Time Voice AI
+
+EEV integrates LiveKit Voice Agents with streaming responses.
+
+Features:
+
+Real-time speech recognition
+
+AI voice assistant
+
+low-latency streaming responses
+
+phone call integration
+
+conversational AI workflows
+
+🧠 System Architecture
+                    ┌──────────────────────────┐
+                    │        User Query        │
+                    └────────────┬─────────────┘
+                                 │
+                         Speech / Text
+                                 │
+                     ┌───────────▼───────────┐
+                     │   Voice / Chat Agent  │
+                     │       (LiveKit)       │
+                     └───────────┬───────────┘
+                                 │
+                        Query Processing
+                                 │
+                     ┌───────────▼───────────┐
+                     │   RAG Pipeline        │
+                     │ (LangChain + LLM)     │
+                     └───────────┬───────────┘
+                                 │
+                       Semantic Retrieval
+                                 │
+                        ┌────────▼─────────┐
+                        │ Pinecone Vector  │
+                        │      Database    │
+                        └────────┬─────────┘
+                                 │
+                        Relevant Documents
+                                 │
+                     ┌───────────▼───────────┐
+                     │      LLM Response     │
+                     └───────────┬───────────┘
+                                 │
+                         Voice / Text Output
+🛠 Technology Stack
+Component	Technology
+Backend	FastAPI
+LLM	OpenAI
+Vector Database	Pinecone
+Embeddings	OpenAI Embeddings
+AI Framework	LangChain
+Voice Infrastructure	LiveKit
+Speech Recognition	Deepgram
+Text-to-Speech	Deepgram Aura
+Containerization	Docker
+Deployment	Cloud / VPS
+📂 Project Structure
+eev-ai/
+│
+├── app/
+│   ├── api/
+│   │   ├── routes/
+│   │   └── logger/
+│   │
+│   ├── toolkit/
+│   │   └── agent_toolkit.py
+│   │
+│   ├── voice_agent_app/
+│   │   └── telephony_agent.py
+│   │
+│   ├── schemas/
+│   │   └── agent_schemas.py
+│   │
+│   └── eev_configurations/
+│       └── config.py
+│
+├── docker/
 ├── requirements.txt
-├── route
-│   └── tier_1_model.py
-├── security
-│   └── authentication.py
-└── utils
-    └── tier_1_utils.py
-```
+└── README.md
+⚡ Installation
+1️⃣ Clone the repository
+git clone https://github.com/yourusername/eev-ai.git
+cd eev-ai
+2️⃣ Install dependencies
+pip install -r requirements.txt
+3️⃣ Configure environment variables
 
--   **`config/`**: Contains configuration for accessing API keys and secrets.
--   **`frontend/`**: Holds the Gradio user interface code.
--   **`main.py`**: The main entry point for the FastAPI application.
--   **`model/`**: Defines the Pydantic data schemas for API requests and responses.
--   **`route/`**: Defines the API routes and their logic.
--   **`security/`**: Handles API authentication.
--   **`utils/`**: Contains the core AI logic, including the LangGraph workflow, tool definitions, and Pinecone integration.
+Create .env
 
-## Getting Started
+OPENAI_API_KEY=
+PINECONE_API_KEY=
+LIVEKIT_URL=
+EEV_BACKEND_API_KEY=
+4️⃣ Start the API
+python run.py
+5️⃣ Start the voice agent
+python app/voice_agent_app/telephony_agent.py
+🔌 API Example
+Query Endpoint
+POST /chat-agent/eev-voice-rag
 
-### Prerequisites
+Request:
 
--   Python 3.9+
--   pip
+{
+  "user_query": "How can I reset my password?",
+  "session_id": "user123",
+  "index_name": "bank-docs"
+}
 
-### Installation
+Response:
 
-1.  **Clone the repository:**
-    ```bash
-    git clone <repository-url>
-    cd eeV-AI
-    ```
+{
+  "bot_response": "To reset your password, open the banking app and follow the forgot password process."
+}
+📊 Performance Optimizations
 
-2.  **Create and activate a virtual environment:**
-    ```bash
-    # For Windows
-    python -m venv .venv
-    .venv\Scripts\activate
+EEV AI includes several optimizations:
 
-    # For macOS/Linux
-    python3 -m venv .venv
-    source .venv/bin/activate
-    ```
+✔ Cached vector retrieval
+✔ Streaming LLM responses
+✔ Asynchronous document ingestion
+✔ HTTP connection pooling
+✔ Low-latency voice pipeline
 
-3.  **Set up environment variables:**
-    -   Rename the `.env.example` file to `.env`.
-    -   Open the `.env` file and add your actual API keys and secrets:
-        ```
-        pinecone_api="your_pinecone_api_key"
-        OPENAI_API_KEY="your_openai_api_key"
-        tier_1_auth_key="your_tier_1_auth_key" # Can be any secret string for local testing
-        GEMINI_API_KEY="your_gemini_api_key"
-        ```
+These ensure fast real-time responses during phone calls.
 
-4.  **Install dependencies:**
-    ```bash
-    pip install -r requirements.txt
-    ```
+🔐 Security
 
-## Usage
+The platform follows secure AI deployment practices:
 
-You need to run the backend and frontend in separate terminals.
+API authentication
 
-### 1. Run the FastAPI Backend
+Controlled document ingestion
 
-In your first terminal, run the following command to start the API server:
+secure vector database access
 
-```bash
-uvicorn main:app --host 0.0.0.0 --port 8000
-```
+prompt injection protection
 
-The API will be available at `http://127.0.0.1:8000`.
+data privacy compliance
 
-### 2. Run the Gradio Frontend
+🧪 Future Roadmap
 
-In your second terminal, run the following command to start the user interface:
+Planned improvements:
 
-```bash
-python frontend/gradio_app.py
-```
+Multi-language voice support
 
-This will open the application in your web browser. The API key is now hardcoded in `frontend/gradio_app.py` for convenience. **Remember to replace the placeholder `"your_tier_1_auth_key"` with your actual key from `.env` for the app to work.** The Gradio app will also provide a public URL that you can share with colleagues (valid for 72 hours).
+African-accent voice models
 
-## API Endpoint
+agent reasoning workflows
 
-### POST /eeVai/model/tier_1_model
+knowledge graph integration
 
-This endpoint processes a user's query and returns the chatbot's response.
+advanced document extraction pipelines
 
--   **Headers:**
-    -   `tier_1_key_auth`: (string, required) Your secret API key.
+👨‍💻 Author
+Joshua
 
--   **Request Body:**
-    ```json
-    {
-      "user_query": "string",
-      "session_id": "string"
-    }
-    ```
+AI Engineer | Data Scientist
 
--   **Success Response (200 OK):**
-    ```json
-    {
-      "bot_response": "string",
-      "session_id": "string"
-    }
-    ```
+Interested in:
 
-## Technology Stack
+Generative AI systems
 
--   **Backend:** FastAPI, Uvicorn
--   **AI/ML:** LangChain, LangGraph, OpenAI, Google Generative AI
--   **Database:** Pinecone (Vector Store), SQLite (Chat Memory)
--   **Frontend:** Gradio
--   **Data Validation:** Pydantic
+Voice AI agents
+
+Intelligent document processing
+
+Enterprise AI automation
+
+⭐ Support the Project
+
+If you find this project useful:
+
+⭐ Star the repository
+⭐ Share it
+⭐ Contribute improvements
+
+🤝 Contributing
+
+Contributions are welcome.
+
+Fork the repository
+
+Create a feature branch
+
+Submit a pull request
